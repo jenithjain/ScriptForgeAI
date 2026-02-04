@@ -96,6 +96,17 @@ export default function WorkflowCanvas({
   const [executingNodeId, setExecutingNodeId] = useState(null);
   const [localProgress, setLocalProgress] = useState({ completedNodes: [], totalNodes: 0 });
 
+  // Update progress based on actual node states
+  useEffect(() => {
+    if (nodes && nodes.length > 0) {
+      const completedNodes = nodes.filter(n => n.data?.status === 'success' || n.data?.result).map(n => n.id);
+      setLocalProgress({
+        completedNodes,
+        totalNodes: nodes.length
+      });
+    }
+  }, [nodes]);
+
   // Function to update a single node's status
   const updateNodeStatus = useCallback((nodeId, status, result = null, error = null) => {
     setNodes((nds) =>
