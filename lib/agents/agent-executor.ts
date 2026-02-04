@@ -854,71 +854,105 @@ async function executeCinematicTeaser(
   model: any,
   context: AgentContext
 ): Promise<{ result: TeaserContent; updatedContext: AgentContext }> {
-  const prompt = `You are the Cinematic Teaser Generator - create an epic trailer for this story.
+  // Extract key story elements for context
+  const storyContext = context.storyContext || {};
+  const knowledgeGraph = context.knowledgeGraph || {};
+  const characters = knowledgeGraph.characters || storyContext.characters || [];
+  const locations = knowledgeGraph.locations || storyContext.locations || [];
+  const themes = storyContext.themes || knowledgeGraph.themes || [];
+  
+  const prompt = `You are the Cinematic Teaser Generator - create an epic, story-specific trailer for this story.
 
-STORY CONTEXT:
-${JSON.stringify(context.storyContext || {}, null, 2)}
+CRITICAL: Your visual prompts MUST be specific to THIS story's characters, locations, and events. NO generic prompts!
 
-KNOWLEDGE GRAPH:
-${JSON.stringify(context.knowledgeGraph || {}, null, 2)}
-
-STORY:
+=== STORY BRIEF ===
 ${context.storyBrief}
 
-YOUR TASK:
-Create a cinematic teaser/trailer including:
-1. Story essence extraction (hook, mood, key moments)
-2. Trailer script with narration
-3. Visual prompts for each scene (suitable for AI video generation)
-4. Multiple hook lines
-5. A memorable tagline
+=== STORY CONTEXT ===
+${JSON.stringify(storyContext, null, 2)}
 
+=== KNOWLEDGE GRAPH DATA ===
+Characters: ${JSON.stringify(characters, null, 2)}
+Locations: ${JSON.stringify(locations, null, 2)}
+Themes: ${JSON.stringify(themes, null, 2)}
+Full Graph: ${JSON.stringify(knowledgeGraph, null, 2)}
+
+=== YOUR TASK ===
+Create a STORY-SPECIFIC cinematic teaser/trailer that:
+1. Uses ACTUAL character names, locations, and events from the story
+2. Creates visual prompts that capture THIS story's unique atmosphere
+3. Includes specific details like character appearance, setting details, emotional beats
+4. Suggests appropriate tones and moods based on the story's genre
+
+=== OUTPUT FORMAT ===
 Return ONLY a valid JSON object:
 {
   "essence": {
-    "genre": "genre description",
-    "mainConflict": "the central tension",
-    "mood": "overall mood/atmosphere",
-    "hook": "the compelling hook",
-    "keyMoments": ["moment1", "moment2", "moment3"]
+    "genre": "specific genre (e.g., 'Sci-Fi Thriller with time-travel elements')",
+    "mainConflict": "the specific central conflict from THIS story",
+    "mood": "overall mood based on story content",
+    "hook": "a hook using story-specific elements",
+    "keyMoments": ["specific moment 1 from story", "specific moment 2", "specific moment 3"],
+    "tone": {
+      "visual": "dark and atmospheric / bright and hopeful / gritty realistic / etc.",
+      "emotional": "tension-building / heartwarming / suspenseful / etc.",
+      "pacing": "slow burn / fast-paced / building crescendo"
+    }
   },
   "teaserScript": {
     "duration": 90,
     "narration": [
-      "Opening line...",
-      "Building tension...",
-      "The reveal...",
-      "Final hook..."
+      "Opening line referencing story element...",
+      "Line introducing specific character/conflict...",
+      "Building to story-specific climax...",
+      "Final hook with story element..."
     ],
     "structure": ["hook", "world-building", "conflict-tease", "climax-hint", "title-reveal"],
-    "musicSuggestion": "type of music that fits",
-    "pacing": "description of pacing"
+    "musicSuggestion": {
+      "genre": "orchestral/electronic/acoustic/etc.",
+      "mood": "specific mood description",
+      "reference": "similar to [reference track/composer]"
+    },
+    "pacing": "detailed pacing description matching story tone"
   },
   "visualPrompts": [
     {
-      "scene": "opening",
-      "prompt": "Detailed visual description for AI generation - be specific about lighting, composition, mood, style",
+      "scene": "SPECIFIC scene name from story (e.g., 'Maya discovers the time portal in her lab')",
+      "prompt": "DETAILED visual: [Character name] in [specific location], [specific action]. Lighting: [type]. Mood: [emotion]. Style: cinematic [genre] aesthetic. Camera: [angle]. Include: [specific story details like costume, props, environment details]",
       "duration": 3,
-      "cameraAngle": "wide establishing shot",
-      "mood": "mysterious",
-      "characters": []
-    },
-    {
-      "scene": "character introduction",
-      "prompt": "Detailed visual of main character...",
-      "duration": 4,
-      "cameraAngle": "medium shot",
-      "mood": "determined",
-      "characters": ["protagonist"]
+      "cameraAngle": "specific camera angle (wide establishing / close-up / tracking / etc.)",
+      "mood": "specific emotional mood",
+      "tone": "visual tone (warm, cold, desaturated, vibrant, etc.)",
+      "characters": ["actual character names from story"],
+      "location": "specific location from story",
+      "action": "what is happening in this moment",
+      "storyContext": "why this moment matters to the story"
     }
   ],
   "hooks": [
-    "Intriguing question or statement 1",
-    "Intriguing question or statement 2",
-    "Intriguing question or statement 3"
+    "Story-specific intriguing question using character/plot element",
+    "Another hook referencing story conflict",
+    "Hook that teases story mystery/climax"
   ],
-  "tagline": "The memorable one-liner tagline"
-}`;
+  "tagline": "Memorable one-liner specific to THIS story's theme",
+  "creativeSuggestions": {
+    "alternativeTones": [
+      {"tone": "darker version", "description": "how to make it more intense"},
+      {"tone": "lighter version", "description": "how to make it more accessible"}
+    ],
+    "visualStyles": [
+      {"style": "style name", "description": "how it would change the feel"}
+    ],
+    "targetAudience": "who this teaser appeals to"
+  }
+}
+
+IMPORTANT RULES:
+1. Every visual prompt MUST reference ACTUAL characters/locations from the story
+2. Scene names should describe WHAT HAPPENS, not generic labels
+3. Prompts should be detailed enough for AI video generation (50-100 words each)
+4. Include character emotions, lighting, atmosphere, camera work
+5. Suggestions should help the writer visualize and refine their vision`;
 
   const response = await generateWithRetry(model, prompt, 3);
   const teaser = parseJSONFromResponse(response) as TeaserContent;

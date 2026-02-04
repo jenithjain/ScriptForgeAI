@@ -174,6 +174,8 @@ export default function WorkflowCanvas({
             onNodeClick: handleNodeClick,
             onRun: (agentType) => executeAgentById(node.id, agentType, true),
             workflowId: workflow._id,
+            projectName: workflow.name,
+            workflowName: workflow.name,
           }
         };
       });
