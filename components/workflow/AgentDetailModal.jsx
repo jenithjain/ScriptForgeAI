@@ -112,7 +112,7 @@ export default function AgentDetailModal({ agent, isOpen, onClose, onRunAgent })
             {agent.data.status !== 'running' && (
               <Button
                 onClick={() => onRunAgent?.(agent)}
-                className="bg-emerald-500 hover:bg-emerald-600 text-white shadow-lg"
+                className="bg-emerald-500 hover:bg-emerald-600 text-white shadow-lg mr-8"
               >
                 <Play className="w-4 h-4 mr-2" />
                 Run Agent
