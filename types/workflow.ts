@@ -77,3 +77,108 @@ export interface ExecutionResult {
   output?: string;
   error?: string;
 }
+
+// ========================================
+// ScriptForge Workflow Types
+// ========================================
+
+export type AgentType =
+  | 'story-intelligence'
+  | 'knowledge-graph'
+  | 'temporal-reasoning'
+  | 'continuity-validator'
+  | 'creative-coauthor'
+  | 'intelligent-recall'
+  | 'cinematic-teaser';
+
+export type FileInputType = 'document' | 'image' | 'video' | 'audio' | 'text';
+
+export interface AgentDefinition {
+  id: string;
+  type: AgentType;
+  name: string;
+  description: string;
+  icon: string;
+  color: string;
+  category: string;
+  capabilities: string[];
+  inputs: string[];
+  outputs: string[];
+}
+
+export interface ScriptForgeNode {
+  id: string;
+  type: 'agent' | 'input' | 'output';
+  position: { x: number; y: number };
+  data: {
+    agentType?: AgentType;
+    label: string;
+    description?: string;
+    icon?: string;
+    color?: string;
+    status?: 'idle' | 'running' | 'success' | 'error';
+    result?: any;
+    config?: Record<string, any>;
+  };
+}
+
+export interface ScriptForgeEdge {
+  id: string;
+  source: string;
+  target: string;
+  label?: string;
+  data?: {
+    semantic?: string;
+    description?: string;
+    dataType?: string;
+  };
+  type?: 'default' | 'smoothstep' | 'step' | 'straight';
+  animated?: boolean;
+  style?: Record<string, any>;
+  markerEnd?: any;
+}
+
+export interface ScriptWorkflow {
+  _id?: string;
+  userId: string;
+  name: string;
+  description?: string;
+  brief?: string;
+  nodes: ScriptForgeNode[];
+  edges: ScriptForgeEdge[];
+  status: 'draft' | 'active' | 'running' | 'completed' | 'error';
+  createdAt: Date;
+  updatedAt: Date;
+  lastRun?: Date;
+  inputs?: WorkflowInput[];
+  progress?: WorkflowProgress;
+}
+
+export interface WorkflowInput {
+  type: FileInputType;
+  content?: string;
+  fileUrl?: string;
+  fileName?: string;
+  mimeType?: string;
+  base64Data?: string;
+}
+
+export interface WorkflowProgress {
+  currentNode?: string;
+  completedNodes: string[];
+  totalNodes: number;
+  errors: Array<{
+    nodeId: string;
+    error: string;
+  }>;
+}
+
+export interface GenerateWorkflowRequest {
+  brief: string;
+  inputs?: WorkflowInput[];
+}
+
+export interface GenerateWorkflowResponse {
+  workflow: ScriptWorkflow;
+  reasoning: string;
+}

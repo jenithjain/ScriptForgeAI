@@ -7,12 +7,12 @@ if (!process.env.GEMINI_API_KEY) {
 // Initialize the Gemini API client
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
-// Reasoning/strategy: Gemini 2.5 Pro (latest premium)
+// Reasoning/strategy: Gemini 2.5 Pro (latest premium model for best results)
 export const getReasoningModel = () => {
   return genAI.getGenerativeModel({
     model: 'gemini-2.5-pro',
     generationConfig: {
-      temperature: 0.8,
+      temperature: 1.0,
       topP: 0.95,
       maxOutputTokens: 8192,
     },

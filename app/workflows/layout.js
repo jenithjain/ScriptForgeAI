@@ -1,10 +1,16 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { usePathname } from "next/navigation";
 import StaggeredMenu from "@/components/StaggeredMenu";
 
-export default function DashboardLayout({ children }) {
+export default function WorkflowsLayout({ children }) {
   const [menuBtnColor, setMenuBtnColor] = useState('#000000');
+  const pathname = usePathname();
+  
+  // Check if we're on a workflow canvas page (e.g., /workflows/abc123)
+  // Don't show navbar on individual workflow pages
+  const isWorkflowCanvasPage = /^\/workflows\/[^\/]+$/.test(pathname);
 
   useEffect(() => {
     // Set initial color
@@ -25,19 +31,24 @@ export default function DashboardLayout({ children }) {
     return () => observer.disconnect();
   }, []);
 
+  // If on workflow canvas, render only children without navbar
+  if (isWorkflowCanvasPage) {
+    return <main className="h-screen w-screen overflow-hidden">{children}</main>;
+  }
+
   return (
     <>
       {/* Navbar */}
-      <div className="fixed top-0 left-0 right-0 z-40 pointer-events-none">
+      <div className="fixed top-0 left-0 right-0 z-50 pointer-events-none">
         <div className="pointer-events-auto">
           <StaggeredMenu
             position="right"
             isFixed={true}
             logoUrl="/chain-forecast.svg"
-            accentColor="#22c55e"
+            accentColor="#10b981"
             colors={["#0f172a", "#111827", "#1f2937"]}
             menuButtonColor={menuBtnColor}
-            openMenuButtonColor="#22c55e"
+            openMenuButtonColor="#10b981"
             items={[
               { label: "Home", link: "/", ariaLabel: "Go to Home" },
               { label: "Dashboard", link: "/dashboard", ariaLabel: "View Dashboard" },
@@ -51,7 +62,7 @@ export default function DashboardLayout({ children }) {
       </div>
 
       {/* Main Content */}
-      <main className="pt-20">
+      <main>
         {children}
       </main>
     </>

@@ -544,48 +544,48 @@ export default function Dashboard() {
             </Card>
           </TabsContent>
 
-          {/* Investments Tab */}
+          {/* Chapter Stats Tab */}
           <TabsContent value="investments" className="space-y-4">
             <div className="grid gap-4 md:grid-cols-3">
               <Card className="border-border/40 backdrop-blur-sm bg-card/50">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                   <CardTitle className="text-sm font-medium ivy-font">
-                    Portfolio Value
+                    Total Scenes
                   </CardTitle>
-                  
+                  <FileText className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold ivy-font">$182,000</div>
+                  <div className="text-2xl font-bold ivy-font">127</div>
                   <p className="text-xs text-muted-foreground ivy-font">
-                    +8.2% from last month
+                    +12 from last week
                   </p>
                 </CardContent>
               </Card>
               <Card className="border-border/40 backdrop-blur-sm bg-card/50">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                   <CardTitle className="text-sm font-medium ivy-font">
-                    Target Value
+                    Script Pages
+                  </CardTitle>
+                  <BookOpen className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold ivy-font">94 pages</div>
+                  <p className="text-xs text-emerald-500 ivy-font">
+                    On track! 📝
+                  </p>
+                </CardContent>
+              </Card>
+              <Card className="border-border/40 backdrop-blur-sm bg-card/50">
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium ivy-font">
+                    Draft Completion
                   </CardTitle>
                   <Target className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold ivy-font">$175,000</div>
-                  <p className="text-xs text-emerald-500 ivy-font">
-                    Target achieved! 🎉
-                  </p>
-                </CardContent>
-              </Card>
-              <Card className="border-border/40 backdrop-blur-sm bg-card/50">
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium ivy-font">
-                    ROI
-                  </CardTitle>
-                  <TrendingUp className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold ivy-font">+45.6%</div>
+                  <div className="text-2xl font-bold ivy-font">78%</div>
                   <p className="text-xs text-muted-foreground ivy-font">
-                    Year to date
+                    First draft progress
                   </p>
                 </CardContent>
               </Card>
