@@ -27,12 +27,14 @@ export class ScriptForgeAIService {
       // Build context from inputs
       const inputContext = await this.buildInputContext(inputs || []);
 
-      const prompt = `You are an expert AI workflow architect for scriptwriting and filmmaking. 
-Your task is to design an intelligent workflow using the available agents to help the user achieve their goal.
+      const prompt = `You are an expert AI workflow architect for scriptwriting and filmmaking.
+Your task is to design an intelligent workflow using ALL available agents to help the user achieve their goal.
 
 User Brief: ${brief}
 
-Available Agents:
+IMPORTANT: You MUST include ALL 7 agents in every workflow. This is a comprehensive scriptwriting tool that requires all agents working together.
+
+Available Agents (INCLUDE ALL OF THEM):
 ${Object.values(AGENT_DEFINITIONS).map(agent => `
 - ${agent.name} (${agent.id})
   Description: ${agent.description}
@@ -45,10 +47,19 @@ Input Context:
 ${inputContext}
 
 Design a workflow that:
-1. Uses the appropriate agents based on the user's brief
+1. INCLUDES ALL 7 AGENTS - story-intelligence, knowledge-graph, temporal-reasoning, continuity-validator, creative-coauthor, intelligent-recall, cinematic-teaser
 2. Creates a logical flow where outputs from one agent feed into inputs of another
-3. Ensures all necessary steps are covered for the user's goal
+3. Ensures comprehensive coverage for script analysis, validation, and enhancement
 4. Provides semantic meaning for each connection (edge) between agents
+
+The standard flow should be:
+- story-intelligence (first - analyzes the script)
+- knowledge-graph (builds entity relationships from story intelligence)
+- temporal-reasoning (validates timeline using knowledge graph)
+- continuity-validator (checks consistency using knowledge graph and timeline)
+- creative-coauthor (suggests improvements based on all analysis)
+- intelligent-recall (enables Q&A about the story)
+- cinematic-teaser (generates promotional content at the end)
 
 Return a JSON object with:
 {
@@ -70,7 +81,7 @@ Return a JSON object with:
   ]
 }
 
-Ensure proper positioning (x, y coordinates) for a left-to-right or top-to-bottom flow.`;
+Ensure proper positioning (x, y coordinates) for a left-to-right flow with proper spacing (400px horizontal, 200px vertical).`;
 
       const result = await this.model.generateContent(prompt);
       const responseText = result.response.text();

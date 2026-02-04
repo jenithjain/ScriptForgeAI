@@ -24,6 +24,8 @@ import AgentNode from './AgentNode';
 import AgentDetailModal from './AgentDetailModal';
 import AgentIcon from './AgentIcon';
 import ManuscriptInputModal from './ManuscriptInputModal';
+import ScriptEditorPanel from './ScriptEditorPanel';
+import AIEditorPage from './AIEditorPage';
 import { AGENT_DEFINITIONS } from '@/lib/agents/definitions';
 import {
   ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Play, Save, Settings,
@@ -95,6 +97,8 @@ export default function WorkflowCanvas({
   const [showManuscriptModal, setShowManuscriptModal] = useState(false);
   const [executingNodeId, setExecutingNodeId] = useState(null);
   const [localProgress, setLocalProgress] = useState({ completedNodes: [], totalNodes: 0 });
+  const [showScriptEditor, setShowScriptEditor] = useState(false);
+  const [showAIEditorPage, setShowAIEditorPage] = useState(false);
 
   // Update progress based on actual node states
   useEffect(() => {
@@ -812,14 +816,27 @@ export default function WorkflowCanvas({
   const handleDropOnCanvas = useCallback((event) => {
     event.preventDefault();
     event.stopPropagation();
-    
+
     const files = Array.from(event.dataTransfer.files);
     const jsonFile = files.find(file => file.type === 'application/json' || file.name.endsWith('.json'));
-    
+
     if (jsonFile) {
       handleImportWorkflow(jsonFile);
     }
   }, [nodes]);
+
+  const handleApplyEdit = useCallback((issue, action) => {
+    if (action === 'accept') {
+      toast.success(`Applied suggestion: ${issue.title}`);
+      console.log('Accepted edit:', issue);
+      // TODO: Apply the edit to the script content in the database
+      // This would involve updating the manuscript or script content
+      // based on the issue.location and issue.suggestion
+    } else if (action === 'reject') {
+      toast(`Rejected suggestion: ${issue.title}`, { icon: '👎' });
+      console.log('Rejected edit:', issue);
+    }
+  }, []);
 
   return (
     <div className="h-screen flex flex-col bg-background">
@@ -847,6 +864,14 @@ export default function WorkflowCanvas({
         </div>
 
         <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            onClick={() => setShowAIEditorPage(true)}
+            className="border-border text-muted-foreground hover:text-foreground hover:bg-accent"
+          >
+            <Sparkles className="w-4 h-4 mr-2" />
+            AI Editor
+          </Button>
           <Button
             onClick={handleExecute}
             disabled={isExecuting}
@@ -915,8 +940,19 @@ export default function WorkflowCanvas({
 
       {/* Main Content Area */}
       <div className="flex-1 flex overflow-hidden">
+        {/* AI Script Editor Panel - Leftmost */}
+        {showScriptEditor && (
+          <ScriptEditorPanel
+            workflow={workflow}
+            nodes={nodes}
+            isOpen={showScriptEditor}
+            onClose={() => setShowScriptEditor(!showScriptEditor)}
+            onApplyEdit={handleApplyEdit}
+          />
+        )}
+
         {/* Left Sidebar - Strategy */}
-        <div 
+        <div
           className={`transition-all duration-300 ${showStrategy ? 'w-96' : 'w-0'} overflow-hidden bg-card/50 backdrop-blur-xl border-r border-border`}
         >
         <div className="h-full flex flex-col">
@@ -1232,6 +1268,15 @@ export default function WorkflowCanvas({
         </div>
       </div>
     </div>
+
+      {/* Full-page AI Editor */}
+      <AIEditorPage
+        isOpen={showAIEditorPage}
+        onClose={() => setShowAIEditorPage(false)}
+        workflow={workflow}
+        nodes={nodes}
+        onApplyEdit={handleApplyEdit}
+      />
     </div>
   );
 }
