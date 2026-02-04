@@ -27,7 +27,7 @@ import ManuscriptInputModal from './ManuscriptInputModal';
 import { AGENT_DEFINITIONS } from '@/lib/agents/definitions';
 import {
   ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Play, Save, Settings,
-  Loader2, CheckCircle, XCircle, Sparkles, X, Home, Brain, Download, Upload, Network
+  Loader2, CheckCircle, XCircle, Sparkles, X, Home, Brain, Download, Upload, Network, FileText
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -95,6 +95,7 @@ export default function WorkflowCanvas({
   const [showManuscriptModal, setShowManuscriptModal] = useState(false);
   const [executingNodeId, setExecutingNodeId] = useState(null);
   const [localProgress, setLocalProgress] = useState({ completedNodes: [], totalNodes: 0 });
+  const [isGeneratingReport, setIsGeneratingReport] = useState(false);
 
   // Update progress based on actual node states
   useEffect(() => {
@@ -802,6 +803,64 @@ export default function WorkflowCanvas({
     reader.readAsText(file);
   };
 
+  // Generate PDF Report
+  const handleGenerateReport = async () => {
+    if (!workflow?._id) {
+      toast.error('No workflow to generate report for');
+      return;
+    }
+
+    // Check if any agents have been executed
+    const executedAgents = nodes.filter(n => n.data?.result || n.data?.output);
+    if (executedAgents.length === 0) {
+      toast.error('Please run at least one agent before generating a report');
+      return;
+    }
+
+    setIsGeneratingReport(true);
+    toast.loading('Generating PDF report...', { id: 'report-generation' });
+
+    try {
+      const response = await fetch('/api/scriptforge/generate-report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ workflowId: workflow._id })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Failed to generate report');
+      }
+
+      // Convert base64 to blob and download
+      const byteCharacters = atob(data.pdf);
+      const byteNumbers = new Array(byteCharacters.length);
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      }
+      const byteArray = new Uint8Array(byteNumbers);
+      const blob = new Blob([byteArray], { type: 'application/pdf' });
+      
+      // Create download link
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = data.filename || `${workflow.name || 'Story'}_Report_${new Date().toISOString().split('T')[0]}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      toast.success('Report downloaded successfully!', { id: 'report-generation' });
+    } catch (error) {
+      console.error('Report generation error:', error);
+      toast.error(error.message || 'Failed to generate report', { id: 'report-generation' });
+    } finally {
+      setIsGeneratingReport(false);
+    }
+  };
+
   const handleDragOverCanvas = useCallback((event) => {
     event.preventDefault();
     event.stopPropagation();
@@ -889,6 +948,24 @@ export default function WorkflowCanvas({
           >
             <Download className="w-4 h-4 mr-2" />
             Export
+          </Button>
+          <Button
+            onClick={handleGenerateReport}
+            disabled={isGeneratingReport}
+            variant="outline"
+            className="border-purple-500/50 text-purple-400 hover:text-purple-300 hover:bg-purple-500/10 hover:border-purple-400"
+          >
+            {isGeneratingReport ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Generating...
+              </>
+            ) : (
+              <>
+                <FileText className="w-4 h-4 mr-2" />
+                Generate Report
+              </>
+            )}
           </Button>
           <Button
             onClick={() => document.getElementById('workflow-import-input')?.click()}

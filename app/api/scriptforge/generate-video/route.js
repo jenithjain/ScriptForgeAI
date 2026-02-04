@@ -10,6 +10,10 @@ import ScriptWorkflow from '@/lib/models/ScriptWorkflow';
 // In-memory store for video operations (use Redis in production)
 const videoOperations = new Map();
 
+// Rate limiting: track last video generation per user
+const userLastGeneration = new Map();
+const MIN_SECONDS_BETWEEN_VIDEOS = 30; // Minimum 30 seconds between video requests
+
 /**
  * Generate a clean file name for videos
  * Format: {projectName}_{sceneName}_{timestamp}.mp4
@@ -55,6 +59,25 @@ export async function POST(request) {
     const session = await getServerSession(authOptions);
     if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    // Rate limiting check - prevent hammering the API
+    const userId = session.user.id;
+    const lastGen = userLastGeneration.get(userId);
+    const now = Date.now();
+    
+    if (lastGen) {
+      const secondsSinceLastGen = (now - lastGen) / 1000;
+      if (secondsSinceLastGen < MIN_SECONDS_BETWEEN_VIDEOS) {
+        const waitTime = Math.ceil(MIN_SECONDS_BETWEEN_VIDEOS - secondsSinceLastGen);
+        return NextResponse.json({
+          success: false,
+          error: `Please wait ${waitTime} seconds before generating another video. This prevents API quota issues.`,
+          status: 'rate_limited',
+          retryAfter: waitTime,
+          tip: 'Veo has strict rate limits. Space out your video generations.'
+        }, { status: 429 });
+      }
     }
 
     // Parse request body ONCE and store it
@@ -128,15 +151,47 @@ export async function POST(request) {
       configParams.negative_prompt = negativePrompt;
     }
 
-    console.log('📤 Sending request to Veo 3.1 API...');
+    console.log('📤 Sending request to Veo API...');
     console.log('Config params:', JSON.stringify(configParams));
 
-    // Generate video using Veo 3.1 model (matching veo-streamlit pattern)
-    const operation = await client.models.generateVideos({
-      model: 'veo-3.1-generate-preview',
-      prompt: prompt,
-      config: configParams,
-    });
+    // Try multiple Veo models with fallback
+    // Preview models have stricter rate limits, so try stable versions first
+    const veoModels = [
+      'veo-3.0-generate-001',        // Most stable
+      'veo-3.0-fast-generate-001',   // Faster, may have better availability
+      'veo-3.1-generate-preview',    // Latest features but preview (stricter limits)
+      'veo-2.0-generate-001',        // Older but stable
+    ];
+
+    let operation = null;
+    let lastError = null;
+    let usedModel = null;
+
+    for (const model of veoModels) {
+      try {
+        console.log(`🎬 Trying model: ${model}`);
+        operation = await client.models.generateVideos({
+          model: model,
+          prompt: prompt,
+          config: configParams,
+        });
+        usedModel = model;
+        console.log(`✅ Success with model: ${model}`);
+        break;
+      } catch (modelError) {
+        console.log(`❌ Model ${model} failed:`, modelError.message);
+        lastError = modelError;
+        // If quota exceeded, wait a bit before trying next model
+        if (modelError.message?.includes('quota') || modelError.message?.includes('429')) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+        continue;
+      }
+    }
+
+    if (!operation) {
+      throw lastError || new Error('All Veo models failed');
+    }
 
     // Store operation for polling
     const operationId = operation.name || `veo_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -167,7 +222,11 @@ export async function POST(request) {
       draftName
     });
 
+    // Update rate limiting timestamp on successful operation start
+    userLastGeneration.set(userId, Date.now());
+
     console.log('✅ Video generation started, operation:', operationId);
+    console.log(`🕐 Rate limit: User ${userId} must wait ${MIN_SECONDS_BETWEEN_VIDEOS}s before next video`);
 
     return NextResponse.json({
       success: true,
@@ -188,13 +247,32 @@ export async function POST(request) {
     console.error('Video Generation Error:', error);
     
     // Handle specific error types
-    if (error.message?.includes('quota')) {
+    if (error.message?.includes('quota') || error.message?.includes('RESOURCE_EXHAUSTED')) {
       return NextResponse.json({
         success: false,
-        error: 'API quota exceeded. Please check your billing settings.',
+        error: 'API quota exceeded. Veo video generation has strict daily limits. Try again later or use fewer videos.',
         status: 'quota_exceeded',
-        shouldPoll: false,  // Tell frontend not to poll
-        fallbackUrl: 'https://aistudio.google.com'
+        shouldPoll: false,
+        fallbackUrl: 'https://aistudio.google.com',
+        tip: 'Veo has ~5-10 videos/day limit on free tier. Wait 1 hour or enable paid billing for higher limits.',
+        concept: {
+          prompt: requestData.prompt || 'Unknown prompt',
+          canRetryIn: '1 hour'
+        }
+      }, { status: 429 });
+    }
+    
+    if (error.message?.includes('rate') || error.message?.includes('too many')) {
+      return NextResponse.json({
+        success: false,
+        error: 'Rate limit hit. Please wait a moment before generating another video.',
+        status: 'rate_limited',
+        shouldPoll: false,
+        retryAfter: 60,
+        tip: 'Wait 60 seconds between video generations',
+        concept: {
+          prompt: requestData.prompt || 'Unknown prompt'
+        }
       }, { status: 429 });
     }
     

@@ -1,0 +1,1043 @@
+import { NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth-options';
+import connectDB from '@/lib/mongodb';
+import ScriptWorkflow from '@/lib/models/ScriptWorkflow';
+import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
+
+/**
+ * PDF Report Generator for Writers
+ * Generates a comprehensive, professional PDF report from all agent analyses
+ * Using pdf-lib which works in serverless environments
+ */
+export async function POST(request) {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const { workflowId } = await request.json();
+
+    if (!workflowId) {
+      return NextResponse.json({ error: 'Workflow ID is required' }, { status: 400 });
+    }
+
+    await connectDB();
+
+    const workflow = await ScriptWorkflow.findOne({
+      _id: workflowId,
+      userId: session.user.id
+    });
+
+    if (!workflow) {
+      return NextResponse.json({ error: 'Workflow not found' }, { status: 404 });
+    }
+
+    // Collect all agent results
+    const agentResults = {};
+    for (const node of workflow.nodes || []) {
+      if (node.data?.result) {
+        agentResults[node.data.agentType] = {
+          result: node.data.result,
+          output: node.data.output,
+          status: node.data.status
+        };
+      }
+    }
+
+    // Generate PDF
+    const pdfBytes = await generatePDF(workflow, agentResults);
+
+    // Return PDF as base64
+    return NextResponse.json({
+      success: true,
+      pdf: Buffer.from(pdfBytes).toString('base64'),
+      filename: `${sanitizeFilename(workflow.name || 'Story_Report')}_${Date.now()}.pdf`
+    });
+
+  } catch (error) {
+    console.error('Report Generation Error:', error);
+    return NextResponse.json({
+      success: false,
+      error: error.message || 'Failed to generate report'
+    }, { status: 500 });
+  }
+}
+
+function sanitizeFilename(name) {
+  return name.replace(/[^a-zA-Z0-9-_]/g, '_').substring(0, 50);
+}
+
+// Colors
+const colors = {
+  primary: rgb(0.545, 0.361, 0.965),      // #8B5CF6
+  secondary: rgb(0.063, 0.725, 0.506),    // #10B981
+  danger: rgb(0.937, 0.267, 0.267),       // #EF4444
+  warning: rgb(0.961, 0.620, 0.043),      // #F59E0B
+  text: rgb(0.122, 0.161, 0.216),         // #1F2937
+  muted: rgb(0.420, 0.447, 0.502),        // #6B7280
+  light: rgb(0.6, 0.6, 0.6)
+};
+
+/**
+ * Generate PDF Document using pdf-lib
+ */
+async function generatePDF(workflow, agentResults) {
+  const pdfDoc = await PDFDocument.create();
+  
+  // Embed fonts
+  const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+  const fontItalic = await pdfDoc.embedFont(StandardFonts.HelveticaOblique);
+
+  const pageWidth = 595;  // A4
+  const pageHeight = 842;
+  const margin = 50;
+  const contentWidth = pageWidth - (margin * 2);
+
+  // Helper to add new page
+  const addPage = () => {
+    const page = pdfDoc.addPage([pageWidth, pageHeight]);
+    return { page, y: pageHeight - margin };
+  };
+
+  // Helper to wrap text
+  const wrapText = (text, maxWidth, fontSize, usedFont = font) => {
+    const words = String(text || '').split(' ');
+    const lines = [];
+    let currentLine = '';
+
+    for (const word of words) {
+      const testLine = currentLine ? `${currentLine} ${word}` : word;
+      const width = usedFont.widthOfTextAtSize(testLine, fontSize);
+      
+      if (width > maxWidth && currentLine) {
+        lines.push(currentLine);
+        currentLine = word;
+      } else {
+        currentLine = testLine;
+      }
+    }
+    if (currentLine) lines.push(currentLine);
+    return lines;
+  };
+
+  // Helper to draw text with wrap
+  const drawText = (page, text, x, y, options = {}) => {
+    const { fontSize = 10, color = colors.text, usedFont = font, maxWidth = contentWidth } = options;
+    const lines = wrapText(text, maxWidth, fontSize, usedFont);
+    let currentY = y;
+    
+    for (const line of lines) {
+      if (currentY < margin + 20) return { y: currentY, overflow: true };
+      page.drawText(line, { x, y: currentY, size: fontSize, font: usedFont, color });
+      currentY -= fontSize + 4;
+    }
+    return { y: currentY, overflow: false };
+  };
+
+  // ==================== COVER PAGE ====================
+  let { page, y } = addPage();
+  
+  // Title
+  y = pageHeight - 200;
+  page.drawText('STORY ANALYSIS', {
+    x: margin,
+    y,
+    size: 36,
+    font: fontBold,
+    color: colors.primary
+  });
+  
+  y -= 50;
+  page.drawText('REPORT', {
+    x: margin,
+    y,
+    size: 28,
+    font: fontBold,
+    color: colors.primary
+  });
+
+  // Project name
+  y -= 80;
+  const projectName = workflow.name || 'Untitled Project';
+  page.drawText(projectName, {
+    x: margin,
+    y,
+    size: 20,
+    font: fontBold,
+    color: colors.text
+  });
+
+  // Generated info
+  y -= 60;
+  page.drawText('Generated by ScriptForge AI', {
+    x: margin,
+    y,
+    size: 12,
+    font: font,
+    color: colors.muted
+  });
+
+  y -= 20;
+  page.drawText(new Date().toLocaleDateString('en-US', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
+  }), {
+    x: margin,
+    y,
+    size: 12,
+    font: font,
+    color: colors.muted
+  });
+
+  // Brief
+  if (workflow.brief) {
+    y -= 60;
+    page.drawText('Project Brief:', {
+      x: margin,
+      y,
+      size: 12,
+      font: fontBold,
+      color: colors.text
+    });
+    y -= 20;
+    const briefText = workflow.brief.substring(0, 500) + (workflow.brief.length > 500 ? '...' : '');
+    const result = drawText(page, briefText, margin, y, { fontSize: 10, color: colors.muted });
+    y = result.y;
+  }
+
+  // ==================== EXECUTIVE SUMMARY ====================
+  ({ page, y } = addPage());
+  
+  // Section header
+  page.drawText('EXECUTIVE SUMMARY', {
+    x: margin,
+    y,
+    size: 20,
+    font: fontBold,
+    color: colors.primary
+  });
+  
+  y -= 10;
+  page.drawLine({
+    start: { x: margin, y },
+    end: { x: pageWidth - margin, y },
+    thickness: 2,
+    color: colors.primary
+  });
+
+  const summary = generateExecutiveSummary(agentResults);
+  
+  // Health status
+  y -= 40;
+  const healthColor = summary.overallHealth === 'Good' ? colors.secondary : 
+                      summary.overallHealth === 'Minor Issues' ? colors.warning : colors.danger;
+  page.drawText(`Story Health: ${summary.overallHealth}`, {
+    x: margin,
+    y,
+    size: 16,
+    font: fontBold,
+    color: healthColor
+  });
+
+  // Overview
+  y -= 30;
+  const overviewResult = drawText(page, summary.overview, margin, y, { fontSize: 11 });
+  y = overviewResult.y;
+
+  // Stats
+  y -= 30;
+  page.drawText(`Critical Issues: ${summary.criticalIssues}`, {
+    x: margin,
+    y,
+    size: 24,
+    font: fontBold,
+    color: colors.danger
+  });
+
+  page.drawText(`Warnings: ${summary.warnings}`, {
+    x: margin + 180,
+    y,
+    size: 24,
+    font: fontBold,
+    color: colors.warning
+  });
+
+  page.drawText(`Suggestions: ${summary.suggestions}`, {
+    x: margin + 340,
+    y,
+    size: 24,
+    font: fontBold,
+    color: colors.secondary
+  });
+
+  // Key findings
+  if (summary.keyFindings.length > 0) {
+    y -= 50;
+    page.drawText('Key Findings:', {
+      x: margin,
+      y,
+      size: 14,
+      font: fontBold,
+      color: colors.text
+    });
+    
+    y -= 20;
+    for (const finding of summary.keyFindings) {
+      page.drawText(`• ${finding}`, {
+        x: margin + 10,
+        y,
+        size: 11,
+        font: font,
+        color: colors.text
+      });
+      y -= 18;
+    }
+  }
+
+  // ==================== STORY OVERVIEW ====================
+  if (agentResults['story-intelligence']) {
+    ({ page, y } = addPage());
+    y = drawSectionHeader(page, 'STORY OVERVIEW', y, margin, pageWidth, fontBold);
+    y = renderStoryIntelligence(page, agentResults['story-intelligence'].result, y, margin, contentWidth, font, fontBold, fontItalic);
+  }
+
+  // ==================== CHARACTERS & RELATIONSHIPS ====================
+  if (agentResults['knowledge-graph']) {
+    ({ page, y } = addPage());
+    y = drawSectionHeader(page, 'CHARACTERS & RELATIONSHIPS', y, margin, pageWidth, fontBold);
+    y = renderKnowledgeGraph(pdfDoc, page, agentResults['knowledge-graph'].result, y, margin, contentWidth, font, fontBold, pageHeight);
+  }
+
+  // ==================== TIMELINE ====================
+  if (agentResults['temporal-reasoning']) {
+    ({ page, y } = addPage());
+    y = drawSectionHeader(page, 'TIMELINE & EVENTS', y, margin, pageWidth, fontBold);
+    y = renderTimeline(pdfDoc, page, agentResults['temporal-reasoning'].result, y, margin, contentWidth, font, fontBold, pageHeight);
+  }
+
+  // ==================== CONTINUITY ISSUES ====================
+  if (agentResults['continuity-validator']) {
+    ({ page, y } = addPage());
+    y = drawSectionHeader(page, 'CONTINUITY ANALYSIS', y, margin, pageWidth, fontBold);
+    const result = renderContinuityReport(pdfDoc, page, agentResults['continuity-validator'].result, y, margin, contentWidth, font, fontBold, pageHeight, pageWidth);
+    page = result.page;
+    y = result.y;
+  }
+
+  // ==================== CREATIVE SUGGESTIONS ====================
+  if (agentResults['creative-coauthor']) {
+    ({ page, y } = addPage());
+    y = drawSectionHeader(page, 'CREATIVE SUGGESTIONS', y, margin, pageWidth, fontBold);
+    const result = renderCreativeSuggestions(pdfDoc, page, agentResults['creative-coauthor'].result, y, margin, contentWidth, font, fontBold, pageHeight, pageWidth);
+    page = result.page;
+    y = result.y;
+  }
+
+  // ==================== STORY INSIGHTS ====================
+  if (agentResults['intelligent-recall']) {
+    ({ page, y } = addPage());
+    y = drawSectionHeader(page, 'STORY INSIGHTS', y, margin, pageWidth, fontBold);
+    y = renderIntelligentRecall(pdfDoc, page, agentResults['intelligent-recall'].result, y, margin, contentWidth, font, fontBold, pageHeight);
+  }
+
+  // ==================== VISUAL CONCEPTS ====================
+  if (agentResults['cinematic-teaser']) {
+    ({ page, y } = addPage());
+    y = drawSectionHeader(page, 'VISUAL CONCEPTS', y, margin, pageWidth, fontBold);
+    const result = renderCinematicTeaser(pdfDoc, page, agentResults['cinematic-teaser'].result, y, margin, contentWidth, font, fontBold, fontItalic, pageHeight, pageWidth);
+    page = result.page;
+    y = result.y;
+  }
+
+  // ==================== ACTION ITEMS ====================
+  ({ page, y } = addPage());
+  y = drawSectionHeader(page, 'ACTION ITEMS & NEXT STEPS', y, margin, pageWidth, fontBold);
+  const actions = generateActionItems(agentResults);
+  renderActionItems(pdfDoc, page, actions, y, margin, contentWidth, font, fontBold, pageHeight, pageWidth);
+
+  // Add page numbers
+  const pages = pdfDoc.getPages();
+  pages.forEach((pg, i) => {
+    pg.drawText(`ScriptForge AI Report - Page ${i + 1} of ${pages.length}`, {
+      x: margin,
+      y: 25,
+      size: 8,
+      font: font,
+      color: colors.muted
+    });
+  });
+
+  return await pdfDoc.save();
+}
+
+function drawSectionHeader(page, title, y, margin, pageWidth, fontBold) {
+  page.drawText(title, {
+    x: margin,
+    y,
+    size: 20,
+    font: fontBold,
+    color: colors.primary
+  });
+  
+  y -= 10;
+  page.drawLine({
+    start: { x: margin, y },
+    end: { x: pageWidth - margin, y },
+    thickness: 2,
+    color: colors.primary
+  });
+  
+  return y - 30;
+}
+
+function drawSubsectionHeader(page, title, y, margin, fontBold) {
+  page.drawText(title, {
+    x: margin,
+    y,
+    size: 14,
+    font: fontBold,
+    color: colors.text
+  });
+  return y - 20;
+}
+
+// ==================== SUMMARY GENERATOR ====================
+function generateExecutiveSummary(agentResults) {
+  const summary = {
+    overview: '',
+    keyFindings: [],
+    criticalIssues: 0,
+    warnings: 0,
+    suggestions: 0,
+    overallHealth: 'Good'
+  };
+
+  if (agentResults['continuity-validator']?.result) {
+    const cv = agentResults['continuity-validator'].result;
+    const issues = cv.errors || cv.issues || cv.contradictions || [];
+    summary.criticalIssues = issues.filter(e => 
+      e.severity === 'critical' || e.severity === 'high'
+    ).length;
+    summary.warnings = issues.filter(e => 
+      e.severity === 'medium' || e.severity === 'warning'
+    ).length;
+    
+    if (summary.criticalIssues > 3) {
+      summary.overallHealth = 'Needs Attention';
+    } else if (summary.criticalIssues > 0) {
+      summary.overallHealth = 'Minor Issues';
+    }
+  }
+
+  if (agentResults['creative-coauthor']?.result) {
+    const cc = agentResults['creative-coauthor'].result;
+    summary.suggestions = (cc.suggestions || cc.sceneSuggestions || []).length;
+  }
+
+  summary.overview = `This comprehensive report analyzes your manuscript using advanced AI techniques. ` +
+    `We identified ${summary.criticalIssues} critical issue(s) requiring immediate attention, ` +
+    `${summary.warnings} warning(s) to review, and ${summary.suggestions} creative suggestion(s) ` +
+    `to enhance your story.`;
+
+  if (agentResults['story-intelligence']?.result) {
+    const si = agentResults['story-intelligence'].result;
+    if (si.genre) summary.keyFindings.push(`Genre: ${si.genre}`);
+    if (si.themes?.length) summary.keyFindings.push(`Main Themes: ${si.themes.slice(0, 3).join(', ')}`);
+  }
+
+  if (agentResults['knowledge-graph']?.result) {
+    const kg = agentResults['knowledge-graph'].result;
+    const chars = kg.characters || kg.entities?.characters || [];
+    const locs = kg.locations || kg.entities?.locations || [];
+    summary.keyFindings.push(`${chars.length} character(s) identified`);
+    summary.keyFindings.push(`${locs.length} location(s) mapped`);
+  }
+
+  return summary;
+}
+
+// ==================== STORY INTELLIGENCE ====================
+function renderStoryIntelligence(page, result, y, margin, contentWidth, font, fontBold, fontItalic) {
+  if (!result) return y;
+
+  // Genre
+  if (result.genre || result.detectedGenre) {
+    page.drawText(`Genre: ${result.genre || result.detectedGenre}`, {
+      x: margin,
+      y,
+      size: 12,
+      font: fontBold,
+      color: colors.primary
+    });
+    y -= 25;
+  }
+
+  // Themes
+  const themes = result.themes || [];
+  if (themes.length > 0) {
+    page.drawText('Themes:', { x: margin, y, size: 12, font: fontBold, color: colors.text });
+    y -= 18;
+    for (const theme of themes) {
+      page.drawText(`  • ${theme}`, { x: margin, y, size: 10, font: font, color: colors.muted });
+      y -= 15;
+    }
+    y -= 10;
+  }
+
+  // Story essence
+  const essence = result.summary || result.storyEssence || result.essence;
+  if (essence) {
+    y = drawSubsectionHeader(page, 'Story Essence', y, margin, fontBold);
+    const lines = wrapTextSimple(essence, contentWidth, 10, font);
+    for (const line of lines) {
+      page.drawText(line, { x: margin, y, size: 10, font: font, color: colors.text });
+      y -= 14;
+    }
+  }
+
+  return y;
+}
+
+// ==================== KNOWLEDGE GRAPH ====================
+function renderKnowledgeGraph(pdfDoc, page, result, y, margin, contentWidth, font, fontBold, pageHeight) {
+  if (!result) return y;
+
+  const entities = result.entities || result;
+  const characters = entities.characters || result.characters || [];
+  const locations = entities.locations || result.locations || [];
+  const relationships = result.relationships || [];
+
+  // Characters
+  if (characters.length > 0) {
+    y = drawSubsectionHeader(page, `Characters (${characters.length})`, y, margin, fontBold);
+    
+    for (const char of characters) {
+      if (y < 100) {
+        page = pdfDoc.addPage([595, 842]);
+        y = 842 - 50;
+      }
+      
+      const name = char.name || 'Unknown';
+      const role = char.role || 'Supporting';
+      page.drawText(`${name} - ${role}`, { x: margin, y, size: 11, font: fontBold, color: colors.primary });
+      y -= 15;
+      
+      if (char.description) {
+        const lines = wrapTextSimple(char.description, contentWidth - 20, 9, font);
+        for (const line of lines.slice(0, 2)) {
+          page.drawText(line, { x: margin + 10, y, size: 9, font: font, color: colors.muted });
+          y -= 12;
+        }
+      }
+      
+      const traits = Array.isArray(char.traits) ? char.traits : [];
+      if (traits.length > 0) {
+        page.drawText(`Traits: ${traits.join(', ')}`, { x: margin + 10, y, size: 9, font: font, color: colors.muted });
+        y -= 12;
+      }
+      y -= 8;
+    }
+  }
+
+  // Locations
+  if (locations.length > 0) {
+    y -= 10;
+    y = drawSubsectionHeader(page, `Locations (${locations.length})`, y, margin, fontBold);
+    
+    for (const loc of locations) {
+      if (y < 100) {
+        page = pdfDoc.addPage([595, 842]);
+        y = 842 - 50;
+      }
+      const name = loc.name || 'Unknown';
+      const type = loc.type ? ` (${loc.type})` : '';
+      page.drawText(`• ${name}${type}`, { x: margin, y, size: 10, font: font, color: colors.text });
+      y -= 15;
+    }
+  }
+
+  // Relationships
+  if (relationships.length > 0) {
+    y -= 10;
+    y = drawSubsectionHeader(page, 'Character Relationships', y, margin, fontBold);
+    
+    for (const rel of relationships) {
+      if (y < 100) {
+        page = pdfDoc.addPage([595, 842]);
+        y = 842 - 50;
+      }
+      page.drawText(`• ${rel.from} - ${rel.to}: ${rel.type || 'connected'}`, { 
+        x: margin, y, size: 10, font: font, color: colors.text 
+      });
+      y -= 15;
+    }
+  }
+
+  return y;
+}
+
+// ==================== TIMELINE ====================
+function renderTimeline(pdfDoc, page, result, y, margin, contentWidth, font, fontBold, pageHeight) {
+  if (!result) return y;
+
+  const events = result.timeline || result.events || [];
+  const issues = result.temporalIssues || result.issues || [];
+
+  if (events.length > 0) {
+    y = drawSubsectionHeader(page, 'Event Timeline', y, margin, fontBold);
+    
+    for (let i = 0; i < events.length; i++) {
+      if (y < 100) {
+        page = pdfDoc.addPage([595, 842]);
+        y = 842 - 50;
+      }
+      
+      const event = events[i];
+      const name = event.name || event.description || event.event || 'Event';
+      page.drawText(`${i + 1}. ${name}`, { x: margin, y, size: 10, font: fontBold, color: colors.primary });
+      y -= 15;
+      
+      const meta = [];
+      if (event.chapter) meta.push(`Chapter ${event.chapter}`);
+      if (event.timestamp) meta.push(event.timestamp);
+      if (meta.length > 0) {
+        page.drawText(meta.join(' - '), { x: margin + 15, y, size: 9, font: font, color: colors.muted });
+        y -= 12;
+      }
+      y -= 5;
+    }
+  }
+
+  if (issues.length > 0) {
+    y -= 15;
+    y = drawSubsectionHeader(page, 'Timeline Issues', y, margin, fontBold);
+    
+    for (const issue of issues) {
+      if (y < 100) {
+        page = pdfDoc.addPage([595, 842]);
+        y = 842 - 50;
+      }
+      page.drawText(`! ${issue.type || 'Issue'}`, { x: margin, y, size: 10, font: fontBold, color: colors.warning });
+      y -= 14;
+      
+      if (issue.description) {
+        const lines = wrapTextSimple(issue.description, contentWidth - 20, 9, font);
+        for (const line of lines.slice(0, 2)) {
+          page.drawText(line, { x: margin + 10, y, size: 9, font: font, color: colors.text });
+          y -= 12;
+        }
+      }
+      y -= 8;
+    }
+  }
+
+  return y;
+}
+
+// ==================== CONTINUITY REPORT ====================
+function renderContinuityReport(pdfDoc, page, result, y, margin, contentWidth, font, fontBold, pageHeight, pageWidth) {
+  if (!result) return { page, y };
+
+  const issues = result.errors || result.issues || result.contradictions || [];
+  const score = result.continuityScore || result.score || 100;
+
+  // Score
+  const scoreColor = score >= 80 ? colors.secondary : score >= 60 ? colors.warning : colors.danger;
+  page.drawText(`${score}/100`, { x: margin + 200, y, size: 36, font: fontBold, color: scoreColor });
+  y -= 20;
+  page.drawText('Continuity Score', { x: margin + 195, y, size: 12, font: font, color: colors.muted });
+  y -= 30;
+  page.drawText(`Total Issues Found: ${issues.length}`, { x: margin, y, size: 11, font: font, color: colors.text });
+  y -= 30;
+
+  // Categorize
+  const critical = issues.filter(i => i.severity === 'critical' || i.severity === 'high');
+  const warnings = issues.filter(i => i.severity === 'medium' || i.severity === 'warning');
+  const minor = issues.filter(i => !i.severity || i.severity === 'low' || i.severity === 'minor');
+
+  // Critical Issues
+  if (critical.length > 0) {
+    page.drawText(`CRITICAL ISSUES (${critical.length})`, { x: margin, y, size: 14, font: fontBold, color: colors.danger });
+    y -= 25;
+    
+    for (let i = 0; i < critical.length; i++) {
+      if (y < 100) {
+        page = pdfDoc.addPage([pageWidth, pageHeight]);
+        y = pageHeight - 50;
+      }
+      ({ page, y } = renderIssueItem(pdfDoc, page, critical[i], i + 1, colors.danger, y, margin, contentWidth, font, fontBold, pageHeight, pageWidth));
+    }
+    y -= 15;
+  }
+
+  // Warnings
+  if (warnings.length > 0) {
+    if (y < 150) {
+      page = pdfDoc.addPage([pageWidth, pageHeight]);
+      y = pageHeight - 50;
+    }
+    page.drawText(`WARNINGS (${warnings.length})`, { x: margin, y, size: 14, font: fontBold, color: colors.warning });
+    y -= 25;
+    
+    for (let i = 0; i < warnings.length; i++) {
+      if (y < 100) {
+        page = pdfDoc.addPage([pageWidth, pageHeight]);
+        y = pageHeight - 50;
+      }
+      ({ page, y } = renderIssueItem(pdfDoc, page, warnings[i], i + 1, colors.warning, y, margin, contentWidth, font, fontBold, pageHeight, pageWidth));
+    }
+    y -= 15;
+  }
+
+  // Minor
+  if (minor.length > 0) {
+    if (y < 150) {
+      page = pdfDoc.addPage([pageWidth, pageHeight]);
+      y = pageHeight - 50;
+    }
+    page.drawText(`MINOR ISSUES (${minor.length})`, { x: margin, y, size: 14, font: fontBold, color: colors.muted });
+    y -= 25;
+    
+    const showCount = Math.min(minor.length, 10);
+    for (let i = 0; i < showCount; i++) {
+      if (y < 100) {
+        page = pdfDoc.addPage([pageWidth, pageHeight]);
+        y = pageHeight - 50;
+      }
+      ({ page, y } = renderIssueItem(pdfDoc, page, minor[i], i + 1, colors.muted, y, margin, contentWidth, font, fontBold, pageHeight, pageWidth));
+    }
+    
+    if (minor.length > 10) {
+      page.drawText(`...and ${minor.length - 10} more minor issues`, { x: margin, y, size: 9, font: font, color: colors.muted });
+      y -= 15;
+    }
+  }
+
+  return { page, y };
+}
+
+function renderIssueItem(pdfDoc, page, issue, num, accentColor, y, margin, contentWidth, font, fontBold, pageHeight, pageWidth) {
+  const type = issue.type || 'Continuity Error';
+  const description = issue.description || issue.message || '';
+  const fix = issue.recommendation || issue.fix || issue.suggestion || 'Please review and correct';
+
+  page.drawText(`${num}. ${type}`, { x: margin, y, size: 11, font: fontBold, color: accentColor });
+  y -= 15;
+
+  if (description) {
+    const lines = wrapTextSimple(description, contentWidth - 20, 9, font);
+    for (const line of lines.slice(0, 3)) {
+      page.drawText(line, { x: margin + 10, y, size: 9, font: font, color: colors.text });
+      y -= 12;
+    }
+  }
+
+  if (issue.location) {
+    page.drawText(`Location: ${issue.location}`, { x: margin + 10, y, size: 9, font: font, color: colors.muted });
+    y -= 12;
+  }
+
+  page.drawText(`Fix: ${fix.substring(0, 100)}${fix.length > 100 ? '...' : ''}`, { 
+    x: margin + 10, y, size: 9, font: font, color: colors.secondary 
+  });
+  y -= 18;
+
+  return { page, y };
+}
+
+// ==================== CREATIVE SUGGESTIONS ====================
+function renderCreativeSuggestions(pdfDoc, page, result, y, margin, contentWidth, font, fontBold, pageHeight, pageWidth) {
+  if (!result) return { page, y };
+
+  const scenes = result.sceneSuggestions || result.suggestions || [];
+  const dialogues = result.dialogueImprovements || [];
+
+  if (scenes.length > 0) {
+    y = drawSubsectionHeader(page, 'Scene Ideas', y, margin, fontBold);
+    
+    for (let i = 0; i < scenes.length; i++) {
+      if (y < 100) {
+        page = pdfDoc.addPage([pageWidth, pageHeight]);
+        y = pageHeight - 50;
+      }
+      
+      const scene = scenes[i];
+      const summary = scene.summary || scene.description || '';
+      page.drawText(`${i + 1}. ${summary.substring(0, 80)}${summary.length > 80 ? '...' : ''}`, { 
+        x: margin, y, size: 10, font: fontBold, color: colors.secondary 
+      });
+      y -= 15;
+      
+      if (scene.setting) {
+        page.drawText(`Setting: ${scene.setting}`, { x: margin + 10, y, size: 9, font: font, color: colors.muted });
+        y -= 12;
+      }
+      if (scene.purpose) {
+        page.drawText(`Purpose: ${scene.purpose}`, { x: margin + 10, y, size: 9, font: font, color: colors.text });
+        y -= 12;
+      }
+      y -= 8;
+    }
+  }
+
+  if (dialogues.length > 0) {
+    y -= 15;
+    y = drawSubsectionHeader(page, 'Dialogue Suggestions', y, margin, fontBold);
+    
+    for (const d of dialogues.slice(0, 5)) {
+      if (y < 120) {
+        page = pdfDoc.addPage([pageWidth, pageHeight]);
+        y = pageHeight - 50;
+      }
+      
+      page.drawText(`${d.character || 'Character'}:`, { x: margin, y, size: 10, font: fontBold, color: colors.primary });
+      y -= 14;
+      
+      if (d.originalLine || d.original) {
+        page.drawText(`Before: "${(d.originalLine || d.original).substring(0, 60)}..."`, { 
+          x: margin + 10, y, size: 9, font: font, color: colors.danger 
+        });
+        y -= 12;
+      }
+      if (d.suggestedLine || d.suggested) {
+        page.drawText(`After: "${(d.suggestedLine || d.suggested).substring(0, 60)}..."`, { 
+          x: margin + 10, y, size: 9, font: font, color: colors.secondary 
+        });
+        y -= 12;
+      }
+      y -= 10;
+    }
+  }
+
+  return { page, y };
+}
+
+// ==================== INTELLIGENT RECALL ====================
+function renderIntelligentRecall(pdfDoc, page, result, y, margin, contentWidth, font, fontBold, pageHeight) {
+  if (!result) return y;
+
+  const summary = result.summary || result.memorySnapshot || '';
+  const insights = result.keyInsights || result.insights || [];
+  const strengths = result.strengths || [];
+  const improvements = result.improvements || result.weaknesses || [];
+
+  if (summary) {
+    const lines = wrapTextSimple(summary, contentWidth, 10, font);
+    for (const line of lines.slice(0, 4)) {
+      page.drawText(line, { x: margin, y, size: 10, font: font, color: colors.text });
+      y -= 14;
+    }
+    y -= 10;
+  }
+
+  if (insights.length > 0) {
+    y = drawSubsectionHeader(page, 'Key Insights', y, margin, fontBold);
+    for (const insight of insights.slice(0, 5)) {
+      page.drawText(`- ${String(insight).substring(0, 90)}`, { x: margin, y, size: 10, font: font, color: colors.text });
+      y -= 15;
+    }
+    y -= 10;
+  }
+
+  if (strengths.length > 0) {
+    y = drawSubsectionHeader(page, 'Story Strengths', y, margin, fontBold);
+    for (const s of strengths.slice(0, 5)) {
+      page.drawText(`+ ${String(s).substring(0, 90)}`, { x: margin, y, size: 10, font: font, color: colors.secondary });
+      y -= 15;
+    }
+    y -= 10;
+  }
+
+  if (improvements.length > 0) {
+    y = drawSubsectionHeader(page, 'Areas for Improvement', y, margin, fontBold);
+    for (const imp of improvements.slice(0, 5)) {
+      page.drawText(`o ${String(imp).substring(0, 90)}`, { x: margin, y, size: 10, font: font, color: colors.warning });
+      y -= 15;
+    }
+  }
+
+  return y;
+}
+
+// ==================== CINEMATIC TEASER ====================
+function renderCinematicTeaser(pdfDoc, page, result, y, margin, contentWidth, font, fontBold, fontItalic, pageHeight, pageWidth) {
+  if (!result) return { page, y };
+
+  const hookLine = result.hookLine || result.hook || (result.hooks && result.hooks[0]) || '';
+  const tagline = result.tagline || '';
+  const essence = result.storyEssence || result.essence;
+  const prompts = result.visualPrompts || [];
+
+  if (hookLine) {
+    page.drawText(`"${hookLine}"`, { x: margin, y, size: 14, font: fontItalic, color: colors.primary });
+    y -= 30;
+  }
+
+  if (tagline) {
+    page.drawText(`Tagline: ${tagline}`, { x: margin, y, size: 11, font: font, color: colors.text });
+    y -= 25;
+  }
+
+  if (essence) {
+    y = drawSubsectionHeader(page, 'Story Essence', y, margin, fontBold);
+    const essenceText = typeof essence === 'string' ? essence : (essence.hook || essence.mainConflict || '');
+    const lines = wrapTextSimple(essenceText, contentWidth, 10, font);
+    for (const line of lines.slice(0, 4)) {
+      page.drawText(line, { x: margin, y, size: 10, font: font, color: colors.text });
+      y -= 14;
+    }
+    y -= 15;
+  }
+
+  if (prompts.length > 0) {
+    y = drawSubsectionHeader(page, 'Visual Concepts', y, margin, fontBold);
+    
+    for (let i = 0; i < Math.min(prompts.length, 6); i++) {
+      if (y < 100) {
+        page = pdfDoc.addPage([pageWidth, pageHeight]);
+        y = pageHeight - 50;
+      }
+      
+      const v = prompts[i];
+      const scene = typeof v === 'string' ? v : (v.scene || v.description || `Scene ${i + 1}`);
+      page.drawText(`Scene ${i + 1}: ${scene.substring(0, 70)}${scene.length > 70 ? '...' : ''}`, { 
+        x: margin, y, size: 10, font: fontBold, color: colors.primary 
+      });
+      y -= 15;
+      
+      if (v.mood) {
+        page.drawText(`Mood: ${v.mood}`, { x: margin + 10, y, size: 9, font: font, color: colors.muted });
+        y -= 12;
+      }
+      y -= 8;
+    }
+  }
+
+  return { page, y };
+}
+
+// ==================== ACTION ITEMS ====================
+function generateActionItems(agentResults) {
+  const actions = { immediate: [], shortTerm: [], optional: [] };
+
+  if (agentResults['continuity-validator']?.result) {
+    const cv = agentResults['continuity-validator'].result;
+    const issues = cv.errors || cv.issues || cv.contradictions || [];
+    
+    const critical = issues.filter(i => i.severity === 'critical' || i.severity === 'high');
+    critical.forEach(issue => {
+      actions.immediate.push({
+        task: `Fix: ${issue.description || issue.message}`,
+        location: issue.location || issue.chapter || '',
+        recommendation: issue.recommendation || issue.fix || 'Review and correct'
+      });
+    });
+
+    const warnings = issues.filter(i => i.severity === 'medium' || i.severity === 'warning');
+    warnings.forEach(issue => {
+      actions.shortTerm.push({
+        task: `Review: ${issue.description || issue.message}`,
+        recommendation: issue.recommendation || issue.fix || 'Consider revising'
+      });
+    });
+  }
+
+  if (agentResults['creative-coauthor']?.result) {
+    const cc = agentResults['creative-coauthor'].result;
+    const suggestions = cc.sceneSuggestions || cc.suggestions || [];
+    suggestions.slice(0, 5).forEach(s => {
+      actions.optional.push({
+        task: `Consider: ${s.summary || s.description}`,
+        purpose: s.purpose || 'Story enhancement'
+      });
+    });
+  }
+
+  return actions;
+}
+
+function renderActionItems(pdfDoc, page, actions, y, margin, contentWidth, font, fontBold, pageHeight, pageWidth) {
+  // Immediate
+  if (actions.immediate.length > 0) {
+    page.drawText(`IMMEDIATE ACTIONS (${actions.immediate.length})`, { x: margin, y, size: 14, font: fontBold, color: colors.danger });
+    y -= 25;
+    
+    for (let i = 0; i < actions.immediate.length; i++) {
+      if (y < 100) {
+        page = pdfDoc.addPage([pageWidth, pageHeight]);
+        y = pageHeight - 50;
+      }
+      const action = actions.immediate[i];
+      page.drawText(`${i + 1}. ${action.task.substring(0, 80)}`, { x: margin, y, size: 10, font: font, color: colors.text });
+      y -= 14;
+      page.drawText(`-> ${action.recommendation.substring(0, 80)}`, { x: margin + 10, y, size: 9, font: font, color: colors.secondary });
+      y -= 18;
+    }
+    y -= 15;
+  }
+
+  // Short-term
+  if (actions.shortTerm.length > 0) {
+    page.drawText(`SHORT-TERM TASKS (${actions.shortTerm.length})`, { x: margin, y, size: 14, font: fontBold, color: colors.warning });
+    y -= 25;
+    
+    for (let i = 0; i < Math.min(actions.shortTerm.length, 10); i++) {
+      if (y < 100) {
+        page = pdfDoc.addPage([pageWidth, pageHeight]);
+        y = pageHeight - 50;
+      }
+      const action = actions.shortTerm[i];
+      page.drawText(`${i + 1}. ${action.task.substring(0, 80)}`, { x: margin, y, size: 10, font: font, color: colors.text });
+      y -= 16;
+    }
+    y -= 15;
+  }
+
+  // Optional
+  if (actions.optional.length > 0) {
+    page.drawText(`OPTIONAL ENHANCEMENTS (${actions.optional.length})`, { x: margin, y, size: 14, font: fontBold, color: colors.secondary });
+    y -= 25;
+    
+    for (let i = 0; i < actions.optional.length; i++) {
+      if (y < 100) {
+        page = pdfDoc.addPage([pageWidth, pageHeight]);
+        y = pageHeight - 50;
+      }
+      const action = actions.optional[i];
+      page.drawText(`${i + 1}. ${action.task.substring(0, 80)}`, { x: margin, y, size: 10, font: font, color: colors.text });
+      y -= 16;
+    }
+  }
+
+  // Footer
+  y -= 30;
+  page.drawText('This report was generated by ScriptForge AI.', { x: margin, y, size: 10, font: font, color: colors.muted });
+  y -= 14;
+  page.drawText('For best results, address critical issues first, then work through warnings.', { x: margin, y, size: 10, font: font, color: colors.muted });
+}
+
+// Simple text wrapper helper
+function wrapTextSimple(text, maxWidth, fontSize, font) {
+  const words = String(text || '').split(' ');
+  const lines = [];
+  let currentLine = '';
+  const charWidth = fontSize * 0.5; // Approximate
+  const maxChars = Math.floor(maxWidth / charWidth);
+
+  for (const word of words) {
+    const testLine = currentLine ? `${currentLine} ${word}` : word;
+    if (testLine.length > maxChars && currentLine) {
+      lines.push(currentLine);
+      currentLine = word;
+    } else {
+      currentLine = testLine;
+    }
+  }
+  if (currentLine) lines.push(currentLine);
+  return lines;
+}
