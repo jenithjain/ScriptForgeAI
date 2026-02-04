@@ -1,4 +1,4 @@
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist, Geist_Mono, Courier_Prime } from "next/font/google";
 import "./globals.css";
 import BackgroundWrapper from "@/components/BackgroundWrapper";
 import AuthProvider from "@/components/AuthProvider";
@@ -12,6 +12,12 @@ const geistSans = Geist({
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
+});
+
+const courierPrime = Courier_Prime({
+  variable: "--font-courier-prime",
+  subsets: ["latin"],
+  weight: ["400", "700"],
 });
 
 export const metadata = {
@@ -44,7 +50,7 @@ export default function RootLayout({ children }) {
         <link rel="apple-touch-icon" href="/chain-forecast.svg" />
         <meta name="theme-color" content="#0f172a" />
       </head>
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+      <body className={`${geistSans.variable} ${geistMono.variable} ${courierPrime.variable} antialiased`}>
         <AuthProvider>
           <ToastProvider />
           <BackgroundWrapper>
