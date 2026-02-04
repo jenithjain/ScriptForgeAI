@@ -531,7 +531,7 @@ export const StaggeredMenu = ({
                         <UserIcon className="h-4 w-4 text-muted-foreground group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors" />
                       </div>
                       <div className="flex-1 text-left">
-                        <p className="text-sm font-semibold text-foreground">Profile</p>
+                        <p className="text-sm font-semibold text-foreground">{session.user.name || 'Profile'}</p>
                         <p className="text-xs text-muted-foreground truncate max-w-[200px]">{session.user.email}</p>
                       </div>
                       <ChevronDown className="h-4 w-4 text-muted-foreground" />
