@@ -319,24 +319,13 @@ export default function CreateWorkflowPage() {
 
                 {/* File Uploads */}
                 <div>
-                  <div className="flex items-center justify-between mb-3">
-                    <div>
-                      <label className="text-sm font-medium text-slate-700 dark:text-gray-300">
-                        Upload Documents
-                      </label>
-                      <p className="text-xs text-slate-500 dark:text-gray-500 mt-0.5">
-                        PDF, Word, Text, Markdown, RTF supported
-                      </p>
-                    </div>
-                    <Button
-                      onClick={() => fileInputRef.current?.click()}
-                      variant="outline"
-                      size="sm"
-                      className="border-slate-300 dark:border-gray-700 text-slate-700 dark:text-gray-300 hover:bg-slate-100 dark:hover:bg-gray-800"
-                    >
-                      <Upload className="w-4 h-4 mr-2" />
-                      Upload Files
-                    </Button>
+                  <div className="mb-3">
+                    <label className="text-sm font-medium text-slate-700 dark:text-gray-300">
+                      Upload Documents
+                    </label>
+                    <p className="text-xs text-slate-500 dark:text-gray-500 mt-0.5">
+                      PDF, Word, Text, Markdown, RTF supported
+                    </p>
                   </div>
 
                   <input

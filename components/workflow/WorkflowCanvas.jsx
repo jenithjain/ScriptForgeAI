@@ -28,7 +28,7 @@ import ScriptEditorPanel from './ScriptEditorPanel';
 import AIEditorPage from './AIEditorPage';
 import { AGENT_DEFINITIONS } from '@/lib/agents/definitions';
 import {
-  ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Play, Save, Settings,
+  ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Play, Settings,
   Loader2, CheckCircle, XCircle, Sparkles, X, Home, Brain, Download, Upload, Network, FileText
 } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -85,7 +85,7 @@ export default function WorkflowCanvas({
   const [selectedNode, setSelectedNode] = useState(null);
   const [selectedEdge, setSelectedEdge] = useState(null);
   const [showStrategy, setShowStrategy] = useState(true);
-  const [showModules, setShowModules] = useState(true);
+  const [showModules, setShowModules] = useState(false);
   const [isStrategyExpanded, setIsStrategyExpanded] = useState(true);
   const [isExecuting, setIsExecuting] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
@@ -903,10 +903,10 @@ export default function WorkflowCanvas({
     <div className="h-screen flex flex-col bg-background">
       {/* Top Navigation Bar */}
       <div className="flex items-center justify-between px-6 py-3 bg-card/80 backdrop-blur-xl border-b border-border">
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-6">
           <Button
             variant="ghost"
-            onClick={() => window.history.back()}
+            onClick={() => window.location.href = '/workflows/create'}
             className="text-muted-foreground hover:text-foreground"
           >
             <ChevronLeft className="w-4 h-4 mr-1" />
@@ -924,7 +924,7 @@ export default function WorkflowCanvas({
           <span className="text-sm font-semibold text-foreground">Workflow Canvas</span>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-4">
           <Button
             variant="outline"
             onClick={() => setShowAIEditorPage(true)}
@@ -957,14 +957,6 @@ export default function WorkflowCanvas({
           >
             <Settings className="w-4 h-4 mr-2" />
             Reset
-          </Button>
-          <Button
-            onClick={() => onSave?.(nodes, edges)}
-            variant="outline"
-            className="border-border text-muted-foreground hover:text-foreground hover:bg-accent"
-          >
-            <Save className="w-4 h-4 mr-2" />
-            Save
           </Button>
           <Button
             onClick={handleExportWorkflow}
@@ -1007,13 +999,6 @@ export default function WorkflowCanvas({
             onChange={(e) => e.target.files?.[0] && handleImportWorkflow(e.target.files[0])}
             className="hidden"
           />
-          <Button
-            variant="outline"
-            onClick={() => window.location.href = '/workflows'}
-            className="border-border text-muted-foreground hover:text-foreground hover:bg-accent"
-          >
-            Past Workflows
-          </Button>
         </div>
       </div>
 
