@@ -21,7 +21,7 @@ export async function POST(request) {
 
     // Use a model capable of strict instruction following
     const model = genAI.getGenerativeModel({
-      model: 'gemini-2.5-pro', // Using 2.5 Pro for better instruction following than Flash
+      model: 'gemini-2.5-flash', // Using 2.5 Pro for better instruction following than Flash
       generationConfig: {
         temperature: 0.0,
         responseMimeType: "application/json",
@@ -45,6 +45,11 @@ STRICT RULES:
    - Do NOT return a snippet.
    - You MUST include the parts of the sentence/paragraph that did not change.
    - The result should be a complete valid substitute for the original text.
+
+HANDLING CONSISTENCY ISSUES:
+- If the Issue describes a contradiction (e.g., "X was A before, but B now"), you must RESOLVE it by modifying the current "Text" to be consistent with the *implied correct state*.
+- Usually, if an error flags "X is B here", it means B is wrong and should optionally be changed to A (or whatever is consistent).
+- Use context clues in the Issue description.
 
 EXAMPLE 1 (Replacement):
 Input Issue: "Character name typo, should be SARAH"
@@ -70,6 +75,20 @@ Output:
       "type": "replace",
       "original_text": "The ball was thrown by John. He smiled.",
       "new_text": "John threw the ball. He smiled."
+    }
+  ]
+}
+
+EXAMPLE 3 (Consistency/Continuity):
+Input Issue: "Continuity error: The car is red in Scene 1, but blue here."
+Input Text: "He jumps into the blue sedan and speeds off."
+Output:
+{
+  "edits": [
+    {
+      "type": "replace",
+      "original_text": "He jumps into the blue sedan and speeds off.",
+      "new_text": "He jumps into the red sedan and speeds off."
     }
   ]
 }

@@ -13,7 +13,8 @@ import {
   Maximize2, Minimize2, PanelBottomClose, PanelBottom,
   PanelRightClose, PanelRight, RefreshCw, Copy, ArrowLeft,
   Database, Network, Link2, Users, MapPin, Minus, Plus,
-  MessageSquare, Eye, EyeOff, Undo2, Redo2, Bold, Italic
+  MessageSquare, Eye, EyeOff, Undo2, Redo2, Bold, Italic,
+  History, GitBranch, Save
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -380,6 +381,7 @@ export default function AIEditorPage({
   const [isBottomPanelOpen, setIsBottomPanelOpen] = useState(true);
   const [isRightPanelOpen, setIsRightPanelOpen] = useState(true);
   const [isReferencePanelOpen, setIsReferencePanelOpen] = useState(true);
+  const [isVersionPanelOpen, setIsVersionPanelOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('problems');
   const [scriptContent, setScriptContent] = useState('');
   const [scriptLines, setScriptLines] = useState([]);
@@ -391,10 +393,73 @@ export default function AIEditorPage({
   const [rejectedChanges, setRejectedChanges] = useState([]);
   const [pendingChangesInDoc, setPendingChangesInDoc] = useState({});
   const [isEditing, setIsEditing] = useState(false);
+  // Version Control State
+  const [versions, setVersions] = useState([]);
+  const [versionMessage, setVersionMessage] = useState('');
+  const [isSavingVersion, setIsSavingVersion] = useState(false);
+
   const chatEndRef = useRef(null);
   const editorScrollRef = useRef(null);
   const lineRefs = useRef({});
   const editableRefs = useRef({});
+
+  // Version Control Functions
+  const fetchVersions = useCallback(async () => {
+    const wfId = workflow?._id || workflow?.id;
+    if (!wfId) return;
+    try {
+      const res = await fetch(`/api/script-editor/versions?workflowId=${wfId}`);
+      if (res.ok) {
+        const data = await res.json();
+        setVersions(data.versions || []);
+      }
+    } catch (error) {
+      console.error('Failed to fetch versions', error);
+    }
+  }, [workflow]);
+
+  const handleSaveVersion = async () => {
+    const wfId = workflow?._id || workflow?.id;
+    if (!scriptContent || !wfId) return;
+    setIsSavingVersion(true);
+    try {
+      const res = await fetch('/api/script-editor/versions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          workflowId: wfId,
+          content: scriptContent,
+          message: versionMessage || 'Manual checkpoint',
+          stats: {
+             totalLines: scriptContent.split('\n').length
+          }
+        })
+      });
+      if (!res.ok) throw new Error('Save failed');
+      
+      setVersionMessage('');
+      toast.success('Version saved successfully');
+      fetchVersions();
+    } catch (error) {
+      toast.error('Failed to save version');
+    } finally {
+      setIsSavingVersion(false);
+    }
+  };
+
+  const handleRestoreVersion = (version, e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    if (!confirm('Are you sure you want to restore this version? Current changes will be lost unless saved.')) return;
+    setScriptContent(version.content);
+    toast.success(`Restored version from ${new Date(version.createdAt).toLocaleString()}`);
+  };
+
+  // Fetch versions on load
+  useEffect(() => {
+    if (workflow) {
+      fetchVersions();
+    }
+  }, [workflow, fetchVersions]);
 
   // Extract problems from agent outputs
   useEffect(() => {
@@ -573,12 +638,22 @@ export default function AIEditorPage({
     }
   }, [JSON.stringify(nodes), workflow]);
 
-  // Initialize script content once
+  // Initialize script content once, preferring latest version if available
   useEffect(() => {
-    if (workflow?.brief && !scriptContent) {
-      setScriptContent(workflow.brief);
+    // Only run if we don't have content yet
+    if (!scriptContent) {
+        // If versions are loaded, use the latest one
+        if (versions.length > 0) {
+            setScriptContent(versions[0].content);
+            // Optional: Notify user
+            // toast.success("Loaded latest saved version");
+        } 
+        // Fallback to brief if no versions exist
+        else if (workflow?.brief) {
+            setScriptContent(workflow.brief);
+        }
     }
-  }, [workflow]);
+  }, [workflow, versions, scriptContent]);
 
   // Build script content with diff highlighting
   useEffect(() => {
@@ -758,6 +833,34 @@ export default function AIEditorPage({
 
     onApplyEdit?.(problem, 'accept');
     toast.success('Change accepted and applied to document');
+
+    // AUTO-SAVE VERSION: ensure the latest edits persist to history immediately
+    // Calculate content to save synchronously to avoid closure reference errors
+    const autoSaveUpdatedLines = scriptLines.map(line => {
+        if (line.number === problem.line) {
+          return { ...line, content: fixToApply };
+        }
+        return line;
+    });
+    const autoSaveContent = autoSaveUpdatedLines.map(l => l.content).join('\n');
+
+    setTimeout(() => {
+        if (autoSaveContent && workflow?.id) {
+             const wfId = workflow.id;
+             fetch('/api/script-editor/versions', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  workflowId: wfId,
+                  content: autoSaveContent,
+                  message: `Auto-save: Accepted fix for "${problem.title}"`,
+                  stats: { totalLines: autoSaveContent.split('\n').length }
+                })
+             }).then(() => {
+                 fetchVersions(); // Refresh history list
+             });
+        }
+    }, 100);
 
     setChatMessages(prev => [...prev, {
       id: `msg-${Date.now()}`,
@@ -1006,6 +1109,15 @@ export default function AIEditorPage({
           <Button
             variant="ghost"
             size="sm"
+            onClick={() => setIsVersionPanelOpen(!isVersionPanelOpen)}
+            className={`h-8 gap-1 text-xs ${isVersionPanelOpen ? 'bg-muted text-accent-foreground' : ''}`}
+          >
+            <History className="w-3.5 h-3.5" />
+            History
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={() => setIsReferencePanelOpen(!isReferencePanelOpen)}
             className="h-8 gap-1 text-xs"
           >
@@ -1023,6 +1135,73 @@ export default function AIEditorPage({
 
       {/* Main Content */}
       <div className="flex-1 flex overflow-hidden">
+        {/* Version Control Panel */}
+        {isVersionPanelOpen && (
+          <div className="w-64 border-r border-border bg-card/95 flex flex-col z-20">
+            <div className="h-10 border-b border-border flex items-center justify-between px-3 bg-muted/30">
+              <div className="flex items-center gap-2">
+                <GitBranch className="w-4 h-4 text-blue-500" />
+                <span className="text-xs font-semibold">Version History</span>
+              </div>
+              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setIsVersionPanelOpen(false)}>
+                <ChevronLeft className="w-3 h-3" />
+              </Button>
+            </div>
+
+            <div className="p-3 border-b border-border space-y-2">
+               <Textarea
+                  value={versionMessage}
+                  onChange={(e) => setVersionMessage(e.target.value)}
+                  placeholder="Commit message..."
+                  className="h-16 text-xs resize-none mb-1"
+               />
+               <Button size="sm" className="w-full h-7 text-xs gap-2" onClick={handleSaveVersion} disabled={isSavingVersion}>
+                  <Save className="w-3.5 h-3.5" />
+                  {isSavingVersion ? 'Saving...' : 'Save Version'}
+               </Button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto ai-editor-scroll">
+              <div className="p-2 space-y-2">
+                {versions.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <History className="w-8 h-8 mx-auto mb-2 opacity-20" />
+                    <p className="text-xs">No history yet</p>
+                  </div>
+                ) : (
+                    versions.map((version) => (
+                        <div key={version._id} className="p-2.5 rounded border border-border bg-muted/20 hover:bg-muted/40 transition-colors group">
+                           <div className="flex items-start justify-between mb-1">
+                              <span className="text-xs font-medium line-clamp-1">{version.message}</span>
+                              <Badge variant="outline" className="text-[9px] h-4 leading-none">{new Date(version.createdAt).toLocaleDateString()}</Badge>
+                           </div>
+                           <div className="flex items-center justify-between mt-2">
+                              <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+                                 <Clock className="w-3 h-3" />
+                                 {new Date(version.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                              </span>
+                              <Button
+                                type="button" 
+                                variant="ghost"
+                                size="sm"
+                                className="h-5 px-1.5 text-[10px] opacity-0 group-hover:opacity-100 transition-opacity hover:bg-blue-100 hover:text-blue-600 dark:hover:bg-blue-900/40 dark:hover:text-blue-400"
+                                onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    handleRestoreVersion(version, e);
+                                }}
+                              >
+                                Restore
+                              </Button>
+                           </div>
+                        </div>
+                    ))
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Neo4j References Panel - Small Left Sidebar */}
         {isReferencePanelOpen && (
           <div className="w-64 border-r border-border bg-card/95 flex flex-col">
