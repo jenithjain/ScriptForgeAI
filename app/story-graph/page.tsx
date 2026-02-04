@@ -569,7 +569,7 @@ export default function StoryKnowledgeGraphPage() {
 
           {/* Selected Node Details */}
           {selectedNode && (
-            <Card className="absolute top-4 right-4 w-80 max-h-[calc(100vh-8rem)] bg-card/95 border-border backdrop-blur-xl shadow-2xl flex flex-col overflow-hidden">
+            <Card className="absolute top-4 left-4 w-96 max-h-[calc(100vh-8rem)] bg-card/95 border-border backdrop-blur-xl shadow-2xl flex flex-col overflow-hidden z-50">
               <CardHeader className="pb-2 shrink-0">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2 min-w-0">
