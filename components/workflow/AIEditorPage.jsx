@@ -405,6 +405,71 @@ export default function AIEditorPage({
     let problemIndex = 0;
 
     const addProblem = (data, type, category, source) => {
+      let problemLine = data.lineNumber || data.line;
+      let originalText = data.original || data.originalText || data.problematic_text || '';
+      
+      // SMART LINE DETECTION:
+      // If we have the original text, find which line it actually belongs to in the current script.
+      // This fixes issues where agents return incorrect or outdated line numbers,
+      // or when the random fallback was assigning issues to random paragraphs.
+      if (workflow?.brief) {
+        let lines = workflow.brief.split('\n');
+        // If scriptLines is already populated (e.g. from previous render), try to use that for more up-to-date content?
+        // But here we are in the effect that processes nodes.
+        
+        let cleanOriginal = originalText ? originalText.trim() : '';
+        
+        // Strategy 1: Use provided original text
+        if (cleanOriginal) {
+          // 1. Exact match search
+          let matchIdx = lines.findIndex(l => l.includes(cleanOriginal));
+          
+          // 2. Fuzzy match (if exact match fails) - check if snippet is in line
+          if (matchIdx === -1 && cleanOriginal.length > 10) {
+             const snippet = cleanOriginal.length > 30 ? cleanOriginal.substring(0, 30) : cleanOriginal;
+             matchIdx = lines.findIndex(l => l.includes(snippet));
+          }
+          
+          // 3. Reverse fuzzy - check if line is in snippet (for short lines)
+          if (matchIdx === -1 && cleanOriginal.length > 10) {
+             matchIdx = lines.findIndex(l => l.length > 10 && cleanOriginal.includes(l.trim()));
+          }
+
+          if (matchIdx !== -1) {
+            problemLine = matchIdx + 1;
+          }
+        }
+        
+        // Strategy 2: If no original text, or text not found, try to find QUOTED text in the problem message
+        // e.g. "Simran's eyes are described as 'piercing blue'..."
+        if (!cleanOriginal || (cleanOriginal && problemLine === (data.lineNumber || data.line))) {
+           const message = data.description || data.message || String(data);
+           const quotedMatches = message.match(/'([^']+)'/g); // Find text in single quotes
+           
+           if (quotedMatches && quotedMatches.length > 0) {
+               for (const quoted of quotedMatches) {
+                   const textToFind = quoted.replace(/'/g, '').trim();
+                   if (textToFind.length > 10) { // Only search for substantial chunks
+                       let matchIdx = lines.findIndex(l => l.includes(textToFind));
+                       if (matchIdx !== -1) {
+                           problemLine = matchIdx + 1;
+                           // Also update originalText so we can highlight it
+                           if (!cleanOriginal) originalText = textToFind; 
+                           break;
+                       }
+                   }
+               }
+           }
+        }
+      }
+
+      // If we still don't have a line number, default to line 1 to avoid random highlighting errors
+      // Use 0 or null to indicate "general script issue" if your UI supports it, otherwise 1 is safer than random.
+      if (!problemLine) {
+         problemLine = 1;
+      }
+
+
       const problem = {
         id: `problem-${problemIndex++}`,
         type: data.severity === 'high' ? 'error' : data.severity === 'low' ? 'info' : 'warning',
@@ -412,10 +477,10 @@ export default function AIEditorPage({
         title: data.title || data.type || 'Issue Detected',
         message: data.description || data.message || String(data),
         location: data.location || data.scene || 'Script',
-        line: data.lineNumber || data.line || Math.floor(Math.random() * 20) + 1, // Simulated line for demo
+        line: problemLine,
         column: data.column || null,
         source,
-        originalText: data.original || data.originalText || data.problematic_text || '',
+        originalText: originalText,
         suggestedFix: data.suggestion || data.fix || data.suggestedText || data.corrected_text || '',
         explanation: data.explanation || data.reason || '',
         status: 'pending',
@@ -448,7 +513,7 @@ export default function AIEditorPage({
     ];
 
     agentMappings.forEach(({ type, category, name }) => {
-      const agent = nodes.find(n => n.data?.agentType === type);
+      const agent = nodes.find(n => n?.data?.agentType === type);
       if (agent?.data?.result || agent?.data?.output) {
         const data = agent.data.result || agent.data.output;
 
@@ -461,7 +526,7 @@ export default function AIEditorPage({
             'character_issues', 'characterIssues', 'location_issues', 'locationIssues',
             'paradoxes', 'inconsistencies'
           ];
-
+          
           issueFields.forEach(field => {
             const items = data[field];
             if (Array.isArray(items)) {
@@ -478,15 +543,17 @@ export default function AIEditorPage({
 
           // Extract Neo4j knowledge graph references
           if (type === 'knowledge-graph' && data.entities) {
-            data.entities.forEach(entity => {
-              extractedReferences.push({
-                type: 'entity',
-                name: entity.name,
-                entityType: entity.type,
-                properties: entity.properties || {},
-                relationships: entity.relationships || []
-              });
-            });
+             if(Array.isArray(data.entities)){
+                data.entities.forEach(entity => {
+                  extractedReferences.push({
+                    type: 'entity',
+                    name: entity.name,
+                    entityType: entity.type,
+                    properties: entity.properties || {},
+                    relationships: entity.relationships || []
+                  });
+                });
+             }
           }
         }
       }
@@ -504,15 +571,29 @@ export default function AIEditorPage({
         timestamp: new Date()
       }]);
     }
-  }, [nodes]);
+  }, [JSON.stringify(nodes), workflow]);
+
+  // Initialize script content once
+  useEffect(() => {
+    if (workflow?.brief && !scriptContent) {
+      setScriptContent(workflow.brief);
+    }
+  }, [workflow]);
 
   // Build script content with diff highlighting
   useEffect(() => {
-    if (workflow?.brief) {
+    // Determine the source of content - prefer current state if modified, else workflow brief
+    const contentToParse = scriptContent || workflow?.brief;
+    
+    if (contentToParse) {
       // Parse screenplay with structure detection
-      const parsedLines = parseScreenplay(workflow.brief, problems);
+      const parsedLines = parseScreenplay(contentToParse, problems);
       setScriptLines(parsedLines);
-      setScriptContent(workflow.brief);
+      
+      // If we initialized from workflow brief, ensure state is set
+      if (!scriptContent && workflow?.brief) {
+          setScriptContent(workflow.brief);
+      }
       
       // Initialize pending changes in document
       const pendingChanges = {};
@@ -528,7 +609,7 @@ export default function AIEditorPage({
       });
       setPendingChangesInDoc(pendingChanges);
     }
-  }, [workflow, problems]);
+  }, [scriptContent, workflow, problems]);
 
   // Auto-scroll chat
   useEffect(() => {
@@ -560,21 +641,84 @@ export default function AIEditorPage({
     }
   };
 
-  const handleAcceptFix = (problem) => {
+  const handleAcceptFix = async (problem) => {
+    let fixToApply = problem.suggestedFix;
+
+    // Fallback: If no suggestion exists, ask AI to generate one now
+    if (!fixToApply || fixToApply.trim() === '') {
+        try {
+            const loadingId = toast.loading("Generating fix...");
+            
+            // Safely determine text to fix - ALWAYS prefer the full line content for context
+            let textToFix = null;
+            const currentLine = scriptLines.find(l => l.number === problem.line);
+            if (currentLine) textToFix = currentLine.content;
+            
+            // Fallback if line lookup fails
+            if (!textToFix) textToFix = problem.originalText;
+
+            if (!textToFix) {
+                toast.dismiss(loadingId);
+                toast.error("Cannot find text to fix.");
+                return;
+            }
+
+            // Call API
+            const response = await fetch('/api/script-editor/correct', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    issue: problem.message || problem.title, 
+                    text: textToFix 
+                })
+            });
+            
+            toast.dismiss(loadingId);
+
+            if (!response.ok) throw new Error("API Failed");
+            const data = await response.json();
+
+            if (data.edits && data.edits.length > 0) {
+                fixToApply = data.edits[0].new_text;
+                // Update the problem object purely for reference
+                problem.suggestedFix = fixToApply;
+            } else {
+                toast.error("AI could not generate a fix.");
+                return;
+            }
+
+        } catch (e) {
+            console.error("Auto-fix generation failed", e);
+            toast.error("Failed to generate fix.");
+            return;
+        }
+    }
+
+    // Double check we have something to apply
+    if (!fixToApply) return;
+
     // Update the script lines to show the accepted change
-    setScriptLines(prev => prev.map(line => {
-      if (line.number === problem.line) {
-        return {
-          ...line,
-          content: problem.suggestedFix || line.content,
-          hasProblem: false,
-          problem: null,
-          pendingChange: null,
-          acceptedChange: true
-        };
-      }
-      return line;
-    }));
+    setScriptLines(prevLines => {
+       const updatedLines = prevLines.map(line => {
+        if (line.number === problem.line) {
+          return {
+            ...line,
+            content: fixToApply,
+            hasProblem: false,
+            problem: null,
+            pendingChange: null,
+            acceptedChange: true
+          };
+        }
+        return line;
+      });
+
+      // Update the master string content from these new lines
+      const newStringContent = updatedLines.map(l => l.content).join('\n');
+      setScriptContent(newStringContent);
+
+      return updatedLines;
+    });
 
     // Mark problem as resolved
     setResolvedProblems(prev => new Set([...prev, problem.id]));
@@ -583,7 +727,7 @@ export default function AIEditorPage({
     setAcceptedChanges(prev => [...prev, {
       id: problem.id,
       original: problem.originalText,
-      applied: problem.suggestedFix,
+      applied: fixToApply,
       timestamp: new Date()
     }]);
 
@@ -607,7 +751,7 @@ export default function AIEditorPage({
     // Update chat messages to show resolution
     setChatMessages(prev => prev.map(msg => {
       if (msg.problem?.id === problem.id) {
-        return { ...msg, problem: { ...msg.problem, resolved: true, resolution: 'accepted' } };
+        return { ...msg, problem: { ...msg.problem, resolved: true, resolution: 'accepted', suggestedFix: fixToApply } };
       }
       return msg;
     }));
@@ -618,7 +762,7 @@ export default function AIEditorPage({
     setChatMessages(prev => [...prev, {
       id: `msg-${Date.now()}`,
       role: 'system',
-      content: `✓ Change accepted: "${problem.originalText?.substring(0, 30)}..." → "${problem.suggestedFix?.substring(0, 30)}..."`,
+      content: `✓ Change accepted: "${problem.originalText?.substring(0, 30)}..." → "${fixToApply?.substring(0, 30)}..."`,
       timestamp: new Date()
     }]);
   };
@@ -716,9 +860,10 @@ export default function AIEditorPage({
     }
   };
 
-  const handleSendMessage = () => {
+  const handleSendMessage = async () => {
     if (!inputMessage.trim()) return;
 
+    // Add user message to chat immediately
     setChatMessages(prev => [...prev, {
       id: `msg-${Date.now()}`,
       role: 'user',
@@ -726,18 +871,102 @@ export default function AIEditorPage({
       timestamp: new Date()
     }]);
 
+    const currentInput = inputMessage;
     setInputMessage('');
     setIsProcessing(true);
 
-    setTimeout(() => {
+    try {
+      // Determine context for the correction from selected problem
+      let textToFix = '';
+      let issueDescription = currentInput;
+      let targetLineNumber = null;
+
+      if (selectedProblem) {
+        targetLineNumber = selectedProblem.line;
+        // Try to find current content of the line from state
+        const currentLine = scriptLines.find(l => l.number === targetLineNumber);
+        textToFix = currentLine ? currentLine.content : selectedProblem.originalText;
+        
+        // If the user input is brief, combine with problem description for context
+        if (currentInput.length < 50 && selectedProblem.message) {
+            issueDescription = `Context: ${selectedProblem.title} - ${selectedProblem.message}. User Request: ${currentInput}`;
+        }
+      }
+
+      if (!textToFix) {
+        // Fallback response if no context is selected
+        setTimeout(() => {
+            setChatMessages(prev => [...prev, {
+                id: `msg-${Date.now()}`,
+                role: 'assistant',
+                content: "Please select a problem from the list so I know which part of the script to correct.",
+                timestamp: new Date()
+            }]);
+            setIsProcessing(false);
+        }, 500);
+        return;
+      }
+
+      // Call the Correction API
+      const response = await fetch('/api/script-editor/correct', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+            issue: issueDescription, 
+            text: textToFix 
+        })
+      });
+
+      if (!response.ok) throw new Error('Correction request failed');
+
+      const data = await response.json();
+
+      if (data.edits && data.edits.length > 0) {
+        const edit = data.edits[0];
+        
+        // The API now handles cleaning, so use new_text directly
+        // Fallback for empty strings to avoid "..." issue
+        const cleanFixedText = edit.new_text || edit.newText || "(No change generated)";
+
+        const newProblem = {
+            id: `fix-${Date.now()}`,
+            line: targetLineNumber,
+            title: "AI Correction",
+            message: issueDescription,
+            originalText: edit.original_text || textToFix,
+            suggestedFix: cleanFixedText,
+            explanation: "Generated by AI Script Correction Engine",
+            status: 'pending',
+            resolved: false
+        };
+
+        setChatMessages(prev => [...prev, {
+            id: `msg-${Date.now()}`,
+            role: 'assistant',
+            content: "I've generated a fix based on your instructions.",
+            problem: newProblem,
+            timestamp: new Date()
+        }]);
+      } else {
+        setChatMessages(prev => [...prev, {
+            id: `msg-${Date.now()}`,
+            role: 'assistant',
+            content: "I analyzed the text but didn't perform any edits. The text might already match your intent or I couldn't determine a precise fix.",
+            timestamp: new Date()
+        }]);
+      }
+
+    } catch (error) {
+      console.error('AI Error:', error);
       setChatMessages(prev => [...prev, {
         id: `msg-${Date.now()}`,
         role: 'assistant',
-        content: "Based on the Knowledge Graph analysis, I can help you with that. The Neo4j references show the relationships and entities involved in this issue.\n\nWould you like me to:\n- Show more evidence from the graph\n- Suggest alternative fixes\n- Explain the reasoning",
+        content: "Sorry, I encountered an error while communicating with the correction engine.",
         timestamp: new Date()
       }]);
+    } finally {
       setIsProcessing(false);
-    }, 1000);
+    }
   };
 
   const getTypeStyles = (type) => ISSUE_TYPES[type] || ISSUE_TYPES.warning;
