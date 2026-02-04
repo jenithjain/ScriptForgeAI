@@ -226,14 +226,7 @@ export default function CreateWorkflowPage() {
                   )}
                 </div>
 
-                {/* Get Idea Button */}
-                <Button
-                  variant="outline"
-                  className="w-full border-amber-500/50 text-amber-400 hover:bg-amber-500/10"
-                >
-                  <Lightbulb className="w-4 h-4 mr-2" />
-                  Get Idea
-                </Button>
+
 
                 {/* Generate Button */}
                 <Button

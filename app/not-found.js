@@ -49,10 +49,8 @@ export default function NotFound() {
             items={[
               { label: "Home", link: "/", ariaLabel: "Go to Home" },
               { label: "Dashboard", link: "/dashboard", ariaLabel: "View Dashboard" },
-              { label: "Assistant", link: "/assistant", ariaLabel: "AI Assistant" },
+              { label: "Workflows", link: "/workflows", ariaLabel: "Script Workflows" },
               { label: "Features", link: "/#features", ariaLabel: "View Features" },
-              { label: "Pricing", link: "/#pricing", ariaLabel: "View Pricing" },
-              { label: "Contact", link: "/#contact", ariaLabel: "Contact us" },
               { label: "Login", link: "/login", ariaLabel: "Login to your account" },
             ]}
             socialItems={[

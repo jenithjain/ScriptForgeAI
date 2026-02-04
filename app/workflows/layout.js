@@ -53,8 +53,8 @@ export default function WorkflowsLayout({ children }) {
               { label: "Home", link: "/", ariaLabel: "Go to Home" },
               { label: "Dashboard", link: "/dashboard", ariaLabel: "View Dashboard" },
               { label: "Workflows", link: "/workflows", ariaLabel: "Script Workflows" },
-              { label: "Campaign AI", link: "/campaign", ariaLabel: "AI Campaign Generator" },
-              { label: "Profile", link: "/profile", ariaLabel: "View Profile" },
+              { label: "Features", link: "/#features", ariaLabel: "View Features" },
+              { label: "Login", link: "/login", ariaLabel: "Login to your account" },
             ]}
           />
         </div>

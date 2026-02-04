@@ -42,9 +42,8 @@ export default function DashboardLayout({ children }) {
               { label: "Home", link: "/", ariaLabel: "Go to Home" },
               { label: "Dashboard", link: "/dashboard", ariaLabel: "View Dashboard" },
               { label: "Workflows", link: "/workflows", ariaLabel: "Script Workflows" },
-              { label: "Campaign AI", link: "/campaign", ariaLabel: "AI Campaign Generator" },
-              { label: "Assistant", link: "/assistant", ariaLabel: "AI Assistant" },
-              { label: "Profile", link: "/profile", ariaLabel: "View Profile" },
+              { label: "Features", link: "/#features", ariaLabel: "View Features" },
+              { label: "Login", link: "/login", ariaLabel: "Login to your account" },
             ]}
           />
         </div>
