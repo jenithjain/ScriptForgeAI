@@ -393,8 +393,15 @@ export const LaserFlow = ({
     }, { root: null, threshold: 0 });
     io.observe(mount);
 
+    let visTimeout = null;
     const onVis = () => {
-      pausedRef.current = document.hidden;
+      if (document.hidden) {
+        // Delay pause to avoid flicker from brief interruptions (e.g. Win+Shift+S)
+        visTimeout = setTimeout(() => { pausedRef.current = true; }, 200);
+      } else {
+        clearTimeout(visTimeout);
+        pausedRef.current = false;
+      }
     };
     document.addEventListener('visibilitychange', onVis, { passive: true });
 
@@ -504,6 +511,7 @@ export const LaserFlow = ({
 
     return () => {
       cancelAnimationFrame(raf);
+      clearTimeout(visTimeout);
       ro.disconnect();
       io.disconnect();
       document.removeEventListener('visibilitychange', onVis);

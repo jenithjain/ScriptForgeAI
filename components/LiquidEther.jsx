@@ -933,12 +933,16 @@ export default function LiquidEther({
         this._loop = this.loop.bind(this);
         this._resize = this.resize.bind(this);
         window.addEventListener('resize', this._resize);
+        this._visTimeout = null;
         this._onVisibility = () => {
-          const hidden = document.hidden;
-          if (hidden) {
-            this.pause();
-          } else if (isVisibleRef.current) {
-            this.start();
+          if (document.hidden) {
+            // Delay pause to avoid flicker from brief interruptions (e.g. Win+Shift+S)
+            this._visTimeout = setTimeout(() => this.pause(), 200);
+          } else {
+            clearTimeout(this._visTimeout);
+            if (isVisibleRef.current) {
+              this.start();
+            }
           }
         };
         document.addEventListener('visibilitychange', this._onVisibility);
@@ -977,6 +981,7 @@ export default function LiquidEther({
       }
       dispose() {
         try {
+          clearTimeout(this._visTimeout);
           window.removeEventListener('resize', this._resize);
           document.removeEventListener('visibilitychange', this._onVisibility);
           Mouse.dispose();
