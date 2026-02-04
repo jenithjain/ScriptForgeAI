@@ -26,8 +26,9 @@ import AgentIcon from './AgentIcon';
 import { AGENT_DEFINITIONS } from '@/lib/agents/definitions';
 import { 
   ChevronLeft, ChevronRight, ChevronDown, Play, Save, Settings,
-  Loader2, CheckCircle, XCircle, Sparkles, X, Home, Brain
+  Loader2, CheckCircle, XCircle, Sparkles, X, Home, Brain, Download, Upload
 } from 'lucide-react';
+import toast from 'react-hot-toast';
 
 const nodeTypes = {
   agent: AgentNode,
@@ -87,6 +88,7 @@ export default function WorkflowCanvas({
   const [generatedStrategy, setGeneratedStrategy] = useState('');
   const [isGeneratingStrategy, setIsGeneratingStrategy] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
+  const [expandedAgentId, setExpandedAgentId] = useState(null);
 
   // Theme detection
   useEffect(() => {
@@ -384,6 +386,93 @@ export default function WorkflowCanvas({
     setIsExecuting(false);
   };
 
+  const handleExportWorkflow = () => {
+    try {
+      const workflowData = {
+        name: workflow?.name || 'workflow',
+        description: workflow?.description || '',
+        brief: workflow?.brief || '',
+        nodes: nodes,
+        edges: edges,
+        strategy: generatedStrategy,
+        exportedAt: new Date().toISOString(),
+      };
+
+      const dataStr = JSON.stringify(workflowData, null, 2);
+      const dataBlob = new Blob([dataStr], { type: 'application/json' });
+      const url = URL.createObjectURL(dataBlob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `workflow-${workflow?.name || 'export'}-${Date.now()}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      toast.success('Workflow exported successfully!');
+    } catch (error) {
+      console.error('Export error:', error);
+      toast.error('Failed to export workflow');
+    }
+  };
+
+  const handleImportWorkflow = (file) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const importedData = JSON.parse(e.target.result);
+        
+        if (importedData.nodes && importedData.edges) {
+          // Add click handlers to imported nodes
+          const nodesWithHandlers = importedData.nodes.map(node => ({
+            ...node,
+            data: {
+              ...node.data,
+              onNodeClick: handleNodeClick
+            }
+          }));
+          
+          setNodes(nodesWithHandlers);
+          setEdges(importedData.edges);
+          
+          if (importedData.strategy) {
+            setGeneratedStrategy(importedData.strategy);
+          }
+          
+          toast.success('Workflow imported successfully!');
+          onUpdateNodes?.(nodesWithHandlers);
+          onUpdateEdges?.(importedData.edges);
+        } else {
+          toast.error('Invalid workflow file format');
+        }
+      } catch (error) {
+        console.error('Import error:', error);
+        toast.error('Failed to import workflow. Invalid JSON format.');
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const handleDragOverCanvas = useCallback((event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const isJsonFile = event.dataTransfer.types.includes('Files');
+    if (isJsonFile) {
+      event.dataTransfer.dropEffect = 'copy';
+    }
+  }, []);
+
+  const handleDropOnCanvas = useCallback((event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    
+    const files = Array.from(event.dataTransfer.files);
+    const jsonFile = files.find(file => file.type === 'application/json' || file.name.endsWith('.json'));
+    
+    if (jsonFile) {
+      handleImportWorkflow(jsonFile);
+    }
+  }, [nodes]);
+
   return (
     <div className="h-screen flex flex-col bg-background">
       {/* Top Navigation Bar */}
@@ -444,6 +533,29 @@ export default function WorkflowCanvas({
             Save
           </Button>
           <Button
+            onClick={handleExportWorkflow}
+            variant="outline"
+            className="border-border text-muted-foreground hover:text-foreground hover:bg-accent"
+          >
+            <Download className="w-4 h-4 mr-2" />
+            Export
+          </Button>
+          <Button
+            onClick={() => document.getElementById('workflow-import-input')?.click()}
+            variant="outline"
+            className="border-border text-muted-foreground hover:text-foreground hover:bg-accent"
+          >
+            <Upload className="w-4 h-4 mr-2" />
+            Import
+          </Button>
+          <input
+            id="workflow-import-input"
+            type="file"
+            accept=".json,application/json"
+            onChange={(e) => e.target.files?.[0] && handleImportWorkflow(e.target.files[0])}
+            className="hidden"
+          />
+          <Button
             variant="outline"
             onClick={() => window.location.href = '/workflows'}
             className="border-border text-muted-foreground hover:text-foreground hover:bg-accent"
@@ -484,81 +596,63 @@ export default function WorkflowCanvas({
             </div>
           </div>
 
-          <ScrollArea className="flex-1 px-6 pb-6">
-            <div className="space-y-4">
-              {/* Strategy Card */}
-              <Card className="border-border/40 bg-card/50 backdrop-blur-sm">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-semibold text-foreground flex items-center gap-2">
-                    <Sparkles className="w-4 h-4 text-emerald-500" />
-                    Strategic Approach
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {isGeneratingStrategy ? (
-                    <div className="flex items-center gap-2 text-emerald-500">
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      <span className="text-xs">Generating strategy...</span>
-                    </div>
-                  ) : (
-                    <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap">
-                      {generatedStrategy || workflow?.description || 'This workflow orchestrates multiple AI agents to achieve your goals.'}
-                    </p>
-                  )}
-                </CardContent>
-              </Card>
-
-              {/* Progress Card */}
-              {workflow?.progress && (
-                <Card className="border-border/40 bg-card/50 backdrop-blur-sm">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-semibold text-foreground">Progress</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-2">
-                      <div className="flex justify-between text-xs text-muted-foreground">
-                        <span>Completed</span>
-                        <span>{workflow.progress.completedNodes.length}/{workflow.progress.totalNodes}</span>
-                      </div>
-                      <div className="w-full bg-muted rounded-full h-2">
-                        <div
-                          className="bg-emerald-500 h-full rounded-full transition-all"
-                          style={{
-                            width: `${(workflow.progress.completedNodes.length / workflow.progress.totalNodes) * 100}%`
-                          }}
-                        />
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-
-              {/* Selected Agent Card */}
-              {selectedNode && (
-                <Card className="border-border/40 bg-card/50 backdrop-blur-sm">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-semibold text-foreground">Selected Agent</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2">
-                        <span className="text-2xl">{selectedNode.data.icon}</span>
-                        <span className="text-sm font-medium text-foreground">{selectedNode.data.label}</span>
-                      </div>
-                      <p className="text-xs text-muted-foreground">{selectedNode.data.description}</p>
-                      {selectedNode.data.result && (
-                        <div className="mt-2 p-2 bg-muted/50 rounded border border-border text-xs text-muted-foreground">
-                          <pre className="whitespace-pre-wrap">
-                            {JSON.stringify(selectedNode.data.result, null, 2)}
-                          </pre>
+          {/* Scrollable content area */}
+          <div className="flex-1 overflow-hidden px-6">
+            <div className="h-full flex flex-col">
+              {/* Strategic Approach - Scrollable */}
+              <div className="flex-1 overflow-y-auto mb-2 workflow-sidebar-scroll pr-1">
+                <div className="pb-4">
+                  <Card className="border-border/40 bg-card/50 backdrop-blur-sm">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm font-semibold text-foreground flex items-center gap-2">
+                        <Sparkles className="w-4 h-4 text-emerald-500" />
+                        Strategic Approach
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      {isGeneratingStrategy ? (
+                        <div className="flex items-center gap-2 text-emerald-500">
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <span className="text-xs">Generating strategy...</span>
                         </div>
+                      ) : (
+                        <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap">
+                          {generatedStrategy || workflow?.description || 'This workflow orchestrates multiple AI agents to achieve your goals.'}
+                        </p>
                       )}
-                    </div>
-                  </CardContent>
-                </Card>
+                    </CardContent>
+                  </Card>
+                </div>
+              </div>
+
+              {/* Progress Card - Fixed at bottom */}
+              {workflow?.progress && (
+                <div className="shrink-0 pb-6">
+                  <Card className="border-border/40 bg-card/50 backdrop-blur-sm">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm font-semibold text-foreground">Progress</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-2">
+                        <div className="flex justify-between text-xs text-muted-foreground">
+                          <span>Completed</span>
+                          <span>{workflow.progress.completedNodes.length}/{workflow.progress.totalNodes}</span>
+                        </div>
+                        <div className="w-full bg-muted rounded-full h-2">
+                          <div
+                            className="bg-emerald-500 h-full rounded-full transition-all"
+                            style={{
+                              width: `${(workflow.progress.completedNodes.length / workflow.progress.totalNodes) * 100}%`
+                            }}
+                          />
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
               )}
             </div>
-          </ScrollArea>
+          </div>
         </div>
       </div>
 
@@ -582,8 +676,20 @@ export default function WorkflowCanvas({
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
-          onDrop={onDrop}
-          onDragOver={onDragOver}
+          onDrop={(e) => {
+            // Check if it's a JSON file drop
+            const files = Array.from(e.dataTransfer.files);
+            const jsonFile = files.find(file => file.type === 'application/json' || file.name.endsWith('.json'));
+            if (jsonFile) {
+              handleDropOnCanvas(e);
+            } else {
+              onDrop(e);
+            }
+          }}
+          onDragOver={(e) => {
+            onDragOver(e);
+            handleDragOverCanvas(e);
+          }}
           onNodeClick={onNodeClick}
           onEdgeClick={onEdgeClick}
           nodeTypes={nodeTypes}
@@ -611,65 +717,131 @@ export default function WorkflowCanvas({
           onClose={() => setShowDetailModal(false)}
           onRunAgent={handleRunAgentFromModal}
         />
-      </div>
 
-      {/* Right Sidebar - Available Modules */}
-      <div 
-        className={`transition-all duration-300 ${showModules ? 'w-80' : 'w-0'} overflow-hidden bg-card/50 backdrop-blur-xl border-l border-border`}
-      >
-        <div className="h-full flex flex-col">
+        {/* Right Sidebar - Available Modules (Top to Bottom) */}
+        <div className="absolute top-4 right-4 z-10 w-80">
           <div 
-            className="p-4 shrink-0 flex items-center justify-between cursor-pointer hover:bg-accent/50 transition-colors border-b border-border"
-            onClick={() => setShowModules(!showModules)}
+            className={`transition-all duration-500 ease-in-out overflow-hidden bg-card/95 backdrop-blur-xl border border-border rounded-lg shadow-xl ${
+              showModules ? 'max-h-[calc(100vh-8rem)] opacity-100' : 'max-h-0 opacity-0'
+            }`}
           >
-            <h2 className="text-sm font-medium text-foreground">
-              Available Modules
-            </h2>
-            <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${showModules ? '' : 'rotate-180'}`} />
+            <div className="flex flex-col max-h-[calc(100vh-8rem)]">
+              <div 
+                className="p-4 shrink-0 flex items-center justify-between cursor-pointer hover:bg-accent/50 transition-colors border-b border-border"
+                onClick={() => setShowModules(!showModules)}
+              >
+                <h2 className="text-sm font-medium text-foreground">
+                  Available Modules
+                </h2>
+                <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${showModules ? '' : 'rotate-180'}`} />
+              </div>
+
+              <ScrollArea className="flex-1 p-4 overflow-y-auto workflow-sidebar-scroll">
+                <div className="space-y-2">
+                  {Object.entries(AGENT_DEFINITIONS).map(([agentId, agent]) => (
+                    <div
+                      key={agentId}
+                      className="rounded-lg border border-border/40 bg-card/30 overflow-hidden transition-all"
+                    >
+                      {/* Agent Header - Clickable */}
+                      <div
+                        className="p-3 cursor-pointer hover:bg-card/60 transition-all"
+                        onClick={() => setExpandedAgentId(expandedAgentId === agentId ? null : agentId)}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div 
+                            className="p-2 rounded-lg shrink-0"
+                            style={{ 
+                              backgroundColor: `${agent.color}15`,
+                            }}
+                          >
+                            <AgentIcon name={agent.icon} className="w-4 h-4" color={agent.color} />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <h4 className="font-medium text-foreground text-sm">{agent.name}</h4>
+                            <p className="text-xs text-muted-foreground line-clamp-1">
+                              {agent.description.split(' - ')[1] || agent.description}
+                            </p>
+                          </div>
+                          <ChevronDown 
+                            className={`w-4 h-4 text-muted-foreground transition-transform duration-200 ${
+                              expandedAgentId === agentId ? 'rotate-180' : ''
+                            }`} 
+                          />
+                        </div>
+                      </div>
+
+                      {/* Agent Details - Expandable */}
+                      <div 
+                        className={`transition-all duration-300 ease-in-out overflow-hidden ${
+                          expandedAgentId === agentId ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'
+                        }`}
+                      >
+                        <div className="px-3 pb-3 pt-1 border-t border-border/20">
+                          <div className="space-y-2">
+                            <div>
+                              <p className="text-xs font-medium text-foreground mb-1">Description:</p>
+                              <p className="text-xs text-muted-foreground leading-relaxed">
+                                {agent.description}
+                              </p>
+                            </div>
+                            
+                            {agent.capabilities && agent.capabilities.length > 0 && (
+                              <div>
+                                <p className="text-xs font-medium text-foreground mb-1">Capabilities:</p>
+                                <ul className="text-xs text-muted-foreground space-y-1">
+                                  {agent.capabilities.map((capability, idx) => (
+                                    <li key={idx} className="flex items-start gap-1.5">
+                                      <span className="text-emerald-500 mt-0.5">•</span>
+                                      <span>{capability}</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+
+                            {agent.tools && agent.tools.length > 0 && (
+                              <div>
+                                <p className="text-xs font-medium text-foreground mb-1">Tools:</p>
+                                <div className="flex flex-wrap gap-1">
+                                  {agent.tools.map((tool, idx) => (
+                                    <Badge 
+                                      key={idx} 
+                                      variant="outline" 
+                                      className="text-xs px-1.5 py-0.5"
+                                      style={{ borderColor: `${agent.color}40`, color: agent.color }}
+                                    >
+                                      {tool}
+                                    </Badge>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </ScrollArea>
+            </div>
           </div>
 
-          <ScrollArea className="flex-1 p-4">
-            <div className="space-y-2">
-              {Object.entries(AGENT_DEFINITIONS).map(([agentId, agent]) => (
-                <div
-                  key={agentId}
-                  className="p-3 rounded-lg border border-border/40 bg-card/30 hover:bg-card/60 transition-all cursor-pointer group"
-                >
-                  <div className="flex items-center gap-3">
-                    <div 
-                      className="p-2 rounded-lg shrink-0"
-                      style={{ 
-                        backgroundColor: `${agent.color}15`,
-                      }}
-                    >
-                      <AgentIcon name={agent.icon} className="w-4 h-4" color={agent.color} />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <h4 className="font-medium text-foreground text-sm">{agent.name}</h4>
-                      <p className="text-xs text-muted-foreground line-clamp-1">
-                        {agent.description.split(' - ')[1] || agent.description}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              ))}
+          {/* Toggle button when collapsed */}
+          {!showModules && (
+            <div 
+              onClick={() => setShowModules(true)}
+              className="cursor-pointer bg-card/95 backdrop-blur-xl border border-border rounded-lg shadow-xl p-4 flex items-center justify-between hover:bg-accent/50 transition-colors w-full"
+            >
+              <h2 className="text-sm font-medium text-foreground">
+                Available Modules
+              </h2>
+              <ChevronDown className="w-4 h-4 text-muted-foreground rotate-180" />
             </div>
-          </ScrollArea>
+          )}
         </div>
       </div>
     </div>
-
-      {/* Collapse button for right sidebar */}
-      {!showModules && (
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setShowModules(true)}
-          className="absolute top-20 right-4 z-10 bg-card/80 backdrop-blur-xl border-border text-muted-foreground hover:text-foreground hover:bg-accent"
-        >
-          <ChevronLeft className="w-4 h-4" />
-        </Button>
-      )}
     </div>
   );
 }

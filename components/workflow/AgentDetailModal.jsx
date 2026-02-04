@@ -125,7 +125,7 @@ export default function AgentDetailModal({ agent, isOpen, onClose, onRunAgent })
 
         <Tabs defaultValue="prompt" className="w-full">
           <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="prompt">Gemini Prompt</TabsTrigger>
+            <TabsTrigger value="prompt">Input Prompt</TabsTrigger>
             <TabsTrigger value="input">Input Data</TabsTrigger>
             <TabsTrigger value="output">Output Result</TabsTrigger>
           </TabsList>
@@ -134,7 +134,7 @@ export default function AgentDetailModal({ agent, isOpen, onClose, onRunAgent })
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-semibold text-emerald-600 dark:text-emerald-400">
-                  Gemini Prompt
+                  Input Prompt
                 </h3>
                 <Button
                   variant="outline"

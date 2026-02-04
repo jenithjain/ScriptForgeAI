@@ -87,7 +87,7 @@ export default function AgentNode({ data, isConnectable, id }) {
             <div className="mb-3 p-2.5 bg-emerald-500/5 rounded-lg border border-emerald-500/20">
               <div className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 mb-1 flex items-center gap-1">
                 <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span>
-                GEMINI PROMPT
+                INPUT PROMPT
               </div>
               <div className="text-[10px] text-muted-foreground line-clamp-3 font-mono leading-relaxed">
                 {typeof data.prompt === 'string'

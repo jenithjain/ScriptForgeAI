@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import StaggeredMenu from "@/components/StaggeredMenu";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -40,6 +41,28 @@ export default function CreateWorkflowPage() {
   const [inputs, setInputs] = useState([]);
   const [loading, setLoading] = useState(false);
   const [charCount, setCharCount] = useState(0);
+  const [menuBtnColor, setMenuBtnColor] = useState('#000000');
+  const [isDarkMode, setIsDarkMode] = useState(false);
+
+  useEffect(() => {
+    // Set initial color
+    const updateColor = () => {
+      const isDark = document.documentElement.classList.contains('dark');
+      setMenuBtnColor(isDark ? '#ffffff' : '#000000');
+      setIsDarkMode(isDark);
+    };
+    
+    updateColor();
+    
+    // Watch for theme changes
+    const observer = new MutationObserver(updateColor);
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['class']
+    });
+    
+    return () => observer.disconnect();
+  }, []);
 
   const handleBriefChange = (e) => {
     const value = e.target.value;
@@ -132,9 +155,36 @@ export default function CreateWorkflowPage() {
   };
 
   return (
-    <div className="min-h-screen relative overflow-hidden pt-20">
+    <div className="min-h-screen relative overflow-y-auto">
+      {/* Navbar */}
+      <div className="fixed top-0 left-0 right-0 z-40 pointer-events-none">
+        <div className="pointer-events-auto">
+          <StaggeredMenu
+            position="right"
+            isFixed={true}
+            logoUrl="/chain-forecast.svg"
+            accentColor="#22c55e"
+            colors={["#0f172a", "#111827", "#1f2937"]}
+            menuButtonColor={menuBtnColor}
+            openMenuButtonColor="#22c55e"
+            items={[
+              { label: "Home", link: "/", ariaLabel: "Go to Home" },
+              { label: "Dashboard", link: "/dashboard", ariaLabel: "View Dashboard" },
+              { label: "Workflows", link: "/workflows", ariaLabel: "View Workflows" },
+              { label: "Assistant", link: "/assistant", ariaLabel: "AI Assistant" },
+              { label: "Features", link: "/#features", ariaLabel: "View Features" },
+              { label: "Login", link: "/login", ariaLabel: "Login to your account" },
+            ]}
+            socialItems={[
+              { label: "LinkedIn", link: "https://linkedin.com" },
+              { label: "Twitter", link: "https://x.com" },
+              { label: "GitHub", link: "https://github.com" },
+            ]}
+          />
+        </div>
+      </div>
 
-      <div className="container mx-auto px-4 py-8 relative z-10">
+      <div className="container mx-auto px-4 py-8 pt-24 relative z-10">{/* Header */}
         {/* Header */}
         <div className="text-center mb-8">
           <div className="flex items-center justify-center gap-3 mb-4">
@@ -171,7 +221,7 @@ export default function CreateWorkflowPage() {
                     value={brief}
                     onChange={handleBriefChange}
                     placeholder="Create a comprehensive script workflow for developing a sci-fi mystery series. I need help with character development, timeline management, continuity checking, and generating promotional content..."
-                    className="min-h-[200px] bg-white/50 dark:bg-slate-800/50 border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white placeholder:text-slate-500 dark:placeholder:text-slate-400 focus:border-emerald-500 focus:ring-emerald-500"
+                    className="min-h-[200px] max-h-[500px] resize-y bg-white/50 dark:bg-slate-800/50 border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white placeholder:text-slate-500 dark:placeholder:text-slate-400 focus:border-emerald-500 focus:ring-emerald-500"
                   />
                   <p className="text-xs text-gray-500 mt-2">
                     Include: genre, characters, plot elements, goals, target audience, and any specific requirements
