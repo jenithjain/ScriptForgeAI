@@ -75,7 +75,8 @@ export default function WorkflowCanvas({
   onSave, 
   onExecute,
   onUpdateNodes,
-  onUpdateEdges 
+  onUpdateEdges,
+  onRefresh
 }) {
   const [nodes, setNodes, onNodesChange] = useNodesState(workflow?.nodes || []);
   const [edges, setEdges, onEdgesChange] = useEdgesState(workflow?.edges || []);
@@ -93,6 +94,7 @@ export default function WorkflowCanvas({
   const [expandedAgentId, setExpandedAgentId] = useState(null);
   const [showManuscriptModal, setShowManuscriptModal] = useState(false);
   const [executingNodeId, setExecutingNodeId] = useState(null);
+  const [localProgress, setLocalProgress] = useState({ completedNodes: [], totalNodes: 0 });
 
   // Function to update a single node's status
   const updateNodeStatus = useCallback((nodeId, status, result = null, error = null) => {
@@ -131,25 +133,67 @@ export default function WorkflowCanvas({
     return () => observer.disconnect();
   }, []);
 
-  // Auto-layout nodes to prevent overlapping - only run when workflow changes
+  // Auto-layout nodes to prevent overlapping - run when workflow changes
   useEffect(() => {
     if (workflow?.nodes && workflow.nodes.length > 0) {
       const layoutNodes = autoLayoutNodes(workflow.nodes);
       // Add click handler, run handler, and workflow context to all nodes
-      const nodesWithHandlers = layoutNodes.map(node => ({
-        ...node,
-        data: {
-          ...node.data,
-          onNodeClick: handleNodeClick,
-          onRun: (agentType) => executeAgentById(node.id, agentType),
-          workflowId: workflow._id,
-          status: node.data.status || 'idle',
-        }
-      }));
+      // CRITICAL: Preserve existing results/output from executed agents loaded from DB
+      const nodesWithHandlers = layoutNodes.map(node => {
+        // Get the original node data from workflow (includes saved results)
+        const originalNodeData = workflow.nodes.find(n => n.id === node.id)?.data || {};
+        
+        return {
+          ...node,
+          data: {
+            ...node.data,
+            // Preserve all saved data from DB
+            status: originalNodeData.status || node.data.status || 'idle',
+            result: originalNodeData.result || node.data.result,
+            output: originalNodeData.output || node.data.output,
+            input: originalNodeData.input || node.data.input,
+            prompt: originalNodeData.prompt || node.data.prompt,
+            customPrompt: originalNodeData.customPrompt || node.data.customPrompt,
+            error: originalNodeData.error || node.data.error,
+            // Add handlers
+            onNodeClick: handleNodeClick,
+            onRun: (agentType) => executeAgentById(node.id, agentType, true),
+            workflowId: workflow._id,
+          }
+        };
+      });
       setNodes(nodesWithHandlers);
+      
+      // Update detailAgent if it's showing and has new data
+      if (showDetailModal && detailAgent) {
+        const updatedAgent = nodesWithHandlers.find(n => n.id === detailAgent.id);
+        if (updatedAgent) {
+          setDetailAgent(updatedAgent);
+        }
+      }
+      
+      console.log('WorkflowCanvas: Loaded nodes from workflow with preserved data:', 
+        nodesWithHandlers.map(n => ({ id: n.id, status: n.data.status, hasResult: !!n.data.result }))
+      );
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workflow]);
+
+  // Keep detailAgent in sync with nodes after execution
+  useEffect(() => {
+    if (showDetailModal && detailAgent && nodes.length > 0) {
+      const currentNode = nodes.find(n => n.id === detailAgent.id);
+      if (currentNode && currentNode.data.status !== detailAgent.data.status) {
+        console.log('Syncing detailAgent from nodes - status changed:', detailAgent.data.status, '->', currentNode.data.status);
+        setDetailAgent(currentNode);
+      }
+      // Also sync if result appeared
+      if (currentNode && currentNode.data.result && !detailAgent.data.result) {
+        console.log('Syncing detailAgent from nodes - result appeared');
+        setDetailAgent(currentNode);
+      }
+    }
+  }, [nodes, showDetailModal, detailAgent]);
 
   // Update edges to use smooth bezier curves
   useEffect(() => {
@@ -312,7 +356,7 @@ export default function WorkflowCanvas({
   }, [nodes]);
 
   // Function to execute a single agent
-  const executeAgentById = useCallback(async (nodeId, agentType) => {
+  const executeAgentById = useCallback(async (nodeId, agentType, keepModalOpen = false, customPrompt = null) => {
     if (executingNodeId) {
       toast.error('Another agent is already running');
       return;
@@ -320,6 +364,21 @@ export default function WorkflowCanvas({
 
     setExecutingNodeId(nodeId);
     updateNodeStatus(nodeId, 'running');
+    
+    // Update detailAgent if modal is open for this node
+    setDetailAgent(prev => {
+      if (prev && prev.id === nodeId) {
+        return {
+          ...prev,
+          data: {
+            ...prev.data,
+            status: 'running'
+          }
+        };
+      }
+      return prev;
+    });
+    
     toast.loading(`Running ${agentType}...`, { id: `agent-${nodeId}` });
 
     try {
@@ -330,10 +389,14 @@ export default function WorkflowCanvas({
           workflowId: workflow?._id,
           singleAgentId: nodeId,
           agentType: agentType,
+          customPrompt: customPrompt || undefined,
         }),
       });
 
       const data = await response.json();
+      console.log('Agent execution response:', data);
+      console.log('Current detailAgent:', detailAgent);
+      console.log('Executing nodeId:', nodeId);
 
       if (data.success) {
         updateNodeStatus(nodeId, 'success', data.result);
@@ -341,44 +404,99 @@ export default function WorkflowCanvas({
         
         // Update the node with full result data from server
         if (data.nodeData) {
+          console.log('nodeData received from API:', data.nodeData);
+          
+          const updatedNodeData = {
+            ...data.nodeData,
+            status: 'success',
+            onNodeClick: handleNodeClick,
+            onRun: (type) => executeAgentById(nodeId, type, true),
+            workflowId: workflow?._id,
+          };
+          
+          console.log('updatedNodeData to apply:', updatedNodeData);
+          
           setNodes((nds) =>
             nds.map((node) =>
               node.id === nodeId
                 ? {
                     ...node,
-                    data: {
-                      ...node.data,
-                      ...data.nodeData,
-                      status: 'success',
-                      onNodeClick: handleNodeClick,
-                      onRun: (type) => executeAgentById(node.id, type),
-                      workflowId: workflow?._id,
-                    },
+                    data: updatedNodeData,
                   }
                 : node
             )
           );
+          
+          // Force update detailAgent regardless of current state
+          setDetailAgent(prev => {
+            console.log('setDetailAgent callback - prev:', prev?.id, 'nodeId:', nodeId);
+            if (prev && prev.id === nodeId) {
+              console.log('Updating detailAgent with:', updatedNodeData);
+              return {
+                ...prev,
+                data: updatedNodeData
+              };
+            }
+            return prev;
+          });
         }
+        
+        // Trigger a refresh to sync with DB (ensures persistence)
+        // This is called after successful execution, not blocking
+        setTimeout(() => {
+          onRefresh?.();
+        }, 500);
       } else {
         updateNodeStatus(nodeId, 'error', null, data.error);
         toast.error(data.error || 'Agent execution failed', { id: `agent-${nodeId}` });
+        
+        // Update detailAgent with error
+        setDetailAgent(prev => {
+          if (prev && prev.id === nodeId) {
+            return {
+              ...prev,
+              data: {
+                ...prev.data,
+                status: 'error',
+                error: data.error
+              }
+            };
+          }
+          return prev;
+        });
       }
     } catch (error) {
       console.error('Agent execution error:', error);
       updateNodeStatus(nodeId, 'error', null, error.message);
       toast.error('Agent execution failed', { id: `agent-${nodeId}` });
+      
+      // Update detailAgent with error
+      setDetailAgent(prev => {
+        if (prev && prev.id === nodeId) {
+          return {
+            ...prev,
+            data: {
+              ...prev.data,
+              status: 'error',
+              error: error.message
+            }
+          };
+        }
+        return prev;
+      });
     } finally {
       setExecutingNodeId(null);
     }
-  }, [executingNodeId, workflow, updateNodeStatus, handleNodeClick, setNodes]);
+  }, [executingNodeId, workflow, updateNodeStatus, handleNodeClick, setNodes, onRefresh]);
 
-  const handleRunAgentFromModal = useCallback((agent) => {
-    // Trigger agent execution
-    if (agent.data?.onRun) {
-      agent.data.onRun(agent.data.agentType);
+  const handleRunAgentFromModal = useCallback((agent, customPrompt) => {
+    // Trigger agent execution - keep modal open to show results
+    const agentType = agent.data?.agentType;
+    if (agentType) {
+      executeAgentById(agent.id, agentType, true, customPrompt);
     }
-    setShowDetailModal(false);
-  }, []);
+    // Don't close the modal - let user see the results
+  }, [executeAgentById]);
 
   const onDragOver = useCallback((event) => {
     event.preventDefault();
@@ -476,30 +594,119 @@ export default function WorkflowCanvas({
   const handleExecute = async () => {
     setIsExecuting(true);
     
+    // Initialize progress
+    const totalNodes = nodes.length;
+    setLocalProgress({ completedNodes: [], totalNodes });
+    
     // Set all nodes to 'pending' state initially
     setNodes((nds) =>
       nds.map((node, index) => ({
         ...node,
         data: {
           ...node.data,
-          status: index === 0 ? 'running' : 'pending',
+          status: 'pending',
+          result: null,
+          output: null,
+          error: null,
         },
       }))
     );
 
-    toast.loading('Executing workflow...', { id: 'workflow-execute' });
+    toast.loading('Starting workflow execution...', { id: 'workflow-execute' });
 
     try {
-      // Execute workflow
-      await onExecute?.();
+      // Execute nodes one by one
+      const completedNodes = [];
       
-      // After execution, refresh the workflow to get updated node statuses
-      toast.success('Workflow executed successfully!', { id: 'workflow-execute' });
+      for (let i = 0; i < nodes.length; i++) {
+        const node = nodes[i];
+        const agentType = node.data.agentType;
+        
+        // Update this node to 'running'
+        setNodes((nds) =>
+          nds.map((n, idx) => ({
+            ...n,
+            data: {
+              ...n.data,
+              status: n.id === node.id ? 'running' : (idx < i ? 'success' : 'pending'),
+            },
+          }))
+        );
+        
+        toast.loading(`Running ${node.data.label || agentType}... (${i + 1}/${totalNodes})`, { id: 'workflow-execute' });
+        
+        try {
+          // Execute single agent
+          const response = await fetch('/api/scriptforge/workflows/execute', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              workflowId: workflow?._id,
+              singleAgentId: node.id,
+              agentType: agentType,
+            }),
+          });
+
+          const data = await response.json();
+
+          if (data.success && data.nodeData) {
+            // Update the node with results
+            const updatedNodeData = {
+              ...data.nodeData,
+              status: 'success',
+              onNodeClick: handleNodeClick,
+              onRun: (type) => executeAgentById(node.id, type, true),
+              workflowId: workflow?._id,
+            };
+            
+            setNodes((nds) =>
+              nds.map((n) =>
+                n.id === node.id
+                  ? { ...n, data: updatedNodeData }
+                  : n
+              )
+            );
+            
+            // Update detail modal if showing this node
+            if (showDetailModal && detailAgent?.id === node.id) {
+              setDetailAgent(prev => ({ ...prev, data: updatedNodeData }));
+            }
+            
+            completedNodes.push(node.id);
+            setLocalProgress({ completedNodes: [...completedNodes], totalNodes });
+            
+          } else {
+            // Handle error
+            setNodes((nds) =>
+              nds.map((n) =>
+                n.id === node.id
+                  ? { ...n, data: { ...n.data, status: 'error', error: data.error } }
+                  : n
+              )
+            );
+          }
+        } catch (error) {
+          console.error(`Error executing ${agentType}:`, error);
+          setNodes((nds) =>
+            nds.map((n) =>
+              n.id === node.id
+                ? { ...n, data: { ...n.data, status: 'error', error: error.message } }
+                : n
+            )
+          );
+        }
+      }
+      
+      toast.success(`Workflow completed! ${completedNodes.length}/${totalNodes} agents executed.`, { id: 'workflow-execute' });
+      
+      // Trigger a refresh to sync with DB after full execution
+      onRefresh?.();
+      
     } catch (error) {
       console.error('Workflow execution error:', error);
       toast.error('Workflow execution failed', { id: 'workflow-execute' });
       
-      // Reset all nodes to idle on failure
+      // Reset all nodes to error on failure
       setNodes((nds) =>
         nds.map((node) => ({
           ...node,
@@ -774,31 +981,46 @@ export default function WorkflowCanvas({
               </div>
 
               {/* Progress Card - Fixed at bottom */}
-              {workflow?.progress && (
-                <div className="shrink-0 pb-6">
-                  <Card className="border-border/40 bg-card/50 backdrop-blur-sm">
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-sm font-semibold text-foreground">Progress</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-2">
-                        <div className="flex justify-between text-xs text-muted-foreground">
-                          <span>Completed</span>
-                          <span>{workflow.progress.completedNodes.length}/{workflow.progress.totalNodes}</span>
-                        </div>
-                        <div className="w-full bg-muted rounded-full h-2">
-                          <div
-                            className="bg-emerald-500 h-full rounded-full transition-all"
-                            style={{
-                              width: `${(workflow.progress.completedNodes.length / workflow.progress.totalNodes) * 100}%`
-                            }}
-                          />
-                        </div>
+              <div className="shrink-0 pb-6">
+                <Card className="border-border/40 bg-card/50 backdrop-blur-sm">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-semibold text-foreground">Progress</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-2">
+                      <div className="flex justify-between text-xs text-muted-foreground">
+                        <span>Completed</span>
+                        <span>
+                          {localProgress.totalNodes > 0 
+                            ? `${localProgress.completedNodes.length}/${localProgress.totalNodes}`
+                            : workflow?.progress 
+                              ? `${workflow.progress.completedNodes?.length || 0}/${workflow.progress.totalNodes || nodes.length}`
+                              : `0/${nodes.length}`
+                          }
+                        </span>
                       </div>
-                    </CardContent>
-                  </Card>
-                </div>
-              )}
+                      <div className="w-full bg-muted rounded-full h-2 overflow-hidden">
+                        <div
+                          className="bg-emerald-500 h-full rounded-full transition-all duration-500 ease-out"
+                          style={{
+                            width: localProgress.totalNodes > 0
+                              ? `${(localProgress.completedNodes.length / localProgress.totalNodes) * 100}%`
+                              : workflow?.progress
+                                ? `${((workflow.progress.completedNodes?.length || 0) / (workflow.progress.totalNodes || nodes.length)) * 100}%`
+                                : '0%'
+                          }}
+                        />
+                      </div>
+                      {isExecuting && (
+                        <p className="text-xs text-emerald-500 flex items-center gap-1 mt-1">
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                          Executing workflow...
+                        </p>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
             </div>
           </div>
         </div>

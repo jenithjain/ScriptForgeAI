@@ -1,15 +1,27 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
   Plus, Workflow, Clock, CheckCircle, XCircle, Play, 
-  Edit, Trash2, FileText, Sparkles, Loader2
+  Edit, Trash2, FileText, Sparkles, Loader2, AlertCircle,
+  Brain, Network, Search, Film, Zap, RefreshCw
 } from "lucide-react";
 import toast from "react-hot-toast";
+
+// Agent type icons mapping
+const AGENT_ICONS = {
+  'story-intelligence': Brain,
+  'knowledge-graph': Network,
+  'temporal-reasoning': Clock,
+  'continuity-validator': CheckCircle,
+  'creative-coauthor': Sparkles,
+  'intelligent-recall': Search,
+  'cinematic-teaser': Film
+};
 
 export default function WorkflowsPage() {
   const router = useRouter();
@@ -17,11 +29,7 @@ export default function WorkflowsPage() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all');
 
-  useEffect(() => {
-    fetchWorkflows();
-  }, [filter]);
-
-  const fetchWorkflows = async () => {
+  const fetchWorkflows = useCallback(async () => {
     try {
       setLoading(true);
       const params = filter !== 'all' ? `?status=${filter}` : '';
@@ -36,7 +44,20 @@ export default function WorkflowsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [filter]);
+
+  useEffect(() => {
+    fetchWorkflows();
+  }, [fetchWorkflows]);
+
+  // Auto-refresh every 5 seconds when there are running workflows
+  useEffect(() => {
+    const hasRunning = workflows.some(w => w.status === 'running');
+    if (hasRunning) {
+      const interval = setInterval(fetchWorkflows, 5000);
+      return () => clearInterval(interval);
+    }
+  }, [workflows, fetchWorkflows]);
 
   const handleDeleteWorkflow = async (id) => {
     if (!confirm('Are you sure you want to delete this workflow?')) return;
@@ -61,6 +82,7 @@ export default function WorkflowsPage() {
       active: { color: 'bg-blue-500', icon: Workflow },
       running: { color: 'bg-amber-500 animate-pulse', icon: Loader2 },
       completed: { color: 'bg-emerald-500', icon: CheckCircle },
+      partial: { color: 'bg-orange-500', icon: AlertCircle },
       error: { color: 'bg-red-500', icon: XCircle }
     };
 
@@ -69,10 +91,25 @@ export default function WorkflowsPage() {
 
     return (
       <Badge className={`${variant.color} text-white`}>
-        <Icon className="w-3 h-3 mr-1" />
+        <Icon className={`w-3 h-3 mr-1 ${status === 'running' ? 'animate-spin' : ''}`} />
         {status}
       </Badge>
     );
+  };
+
+  // Get counts of executed agents by status
+  const getAgentStats = (workflow) => {
+    if (!workflow.nodes) return { success: 0, error: 0, idle: 0, total: 0 };
+    
+    const stats = { success: 0, error: 0, idle: 0, running: 0, total: workflow.nodes.length };
+    workflow.nodes.forEach(node => {
+      const status = node.data?.status || 'idle';
+      if (status === 'success' || status === 'complete') stats.success++;
+      else if (status === 'error') stats.error++;
+      else if (status === 'running') stats.running++;
+      else stats.idle++;
+    });
+    return stats;
   };
 
   return (
@@ -100,7 +137,7 @@ export default function WorkflowsPage() {
 
         {/* Filter Tabs */}
         <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
-          {['all', 'draft', 'active', 'running', 'completed', 'error'].map((status) => (
+          {['all', 'draft', 'active', 'running', 'completed', 'partial', 'error'].map((status) => (
             <Button
               key={status}
               onClick={() => setFilter(status)}
@@ -110,6 +147,14 @@ export default function WorkflowsPage() {
               {status.charAt(0).toUpperCase() + status.slice(1)}
             </Button>
           ))}
+          <Button
+            variant="outline"
+            onClick={fetchWorkflows}
+            className="ml-auto"
+          >
+            <RefreshCw className="w-4 h-4 mr-2" />
+            Refresh
+          </Button>
         </div>
 
         {/* Workflows Grid */}
@@ -158,35 +203,117 @@ export default function WorkflowsPage() {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-3">
-                    {/* Progress */}
-                    {workflow.progress && (
-                      <div>
-                        <div className="flex justify-between text-sm mb-1">
-                          <span className="text-gray-600 dark:text-gray-400">Progress</span>
-                          <span className="font-semibold">
-                            {workflow.progress.completedNodes.length}/{workflow.progress.totalNodes}
-                          </span>
+                    {/* Agent Execution Stats */}
+                    {(() => {
+                      const stats = getAgentStats(workflow);
+                      const hasExecuted = stats.success > 0 || stats.error > 0 || stats.running > 0;
+                      
+                      return hasExecuted ? (
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between text-sm">
+                            <span className="text-gray-600 dark:text-gray-400">Agents Executed</span>
+                            <div className="flex items-center gap-2">
+                              {stats.success > 0 && (
+                                <span className="flex items-center text-emerald-600">
+                                  <CheckCircle className="w-3 h-3 mr-1" />
+                                  {stats.success}
+                                </span>
+                              )}
+                              {stats.running > 0 && (
+                                <span className="flex items-center text-amber-600">
+                                  <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                                  {stats.running}
+                                </span>
+                              )}
+                              {stats.error > 0 && (
+                                <span className="flex items-center text-red-600">
+                                  <XCircle className="w-3 h-3 mr-1" />
+                                  {stats.error}
+                                </span>
+                              )}
+                              <span className="text-gray-400">/ {stats.total}</span>
+                            </div>
+                          </div>
+                          <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2 overflow-hidden">
+                            <div className="flex h-2">
+                              {stats.success > 0 && (
+                                <div
+                                  className="bg-emerald-500 h-2 transition-all"
+                                  style={{ width: `${(stats.success / stats.total) * 100}%` }}
+                                />
+                              )}
+                              {stats.running > 0 && (
+                                <div
+                                  className="bg-amber-500 h-2 transition-all animate-pulse"
+                                  style={{ width: `${(stats.running / stats.total) * 100}%` }}
+                                />
+                              )}
+                              {stats.error > 0 && (
+                                <div
+                                  className="bg-red-500 h-2 transition-all"
+                                  style={{ width: `${(stats.error / stats.total) * 100}%` }}
+                                />
+                              )}
+                            </div>
+                          </div>
+                          
+                          {/* Show executed agent types */}
+                          <div className="flex flex-wrap gap-1 mt-2">
+                            {workflow.nodes?.filter(n => n.data?.status === 'success').slice(0, 4).map(node => {
+                              const Icon = AGENT_ICONS[node.data?.agentType] || Zap;
+                              return (
+                                <Badge 
+                                  key={node.id} 
+                                  variant="outline" 
+                                  className="text-xs py-0 bg-emerald-50 dark:bg-emerald-950 border-emerald-200 dark:border-emerald-800"
+                                >
+                                  <Icon className="w-3 h-3 mr-1 text-emerald-600" />
+                                  {node.data?.label?.split(' ')[0] || node.data?.agentType}
+                                </Badge>
+                              );
+                            })}
+                            {workflow.nodes?.filter(n => n.data?.status === 'success').length > 4 && (
+                              <Badge variant="outline" className="text-xs py-0">
+                                +{workflow.nodes.filter(n => n.data?.status === 'success').length - 4} more
+                              </Badge>
+                            )}
+                          </div>
                         </div>
-                        <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2">
-                          <div
-                            className="bg-linear-to-r from-emerald-500 via-teal-400 to-cyan-400 h-2 rounded-full transition-all"
-                            style={{
-                              width: `${(workflow.progress.completedNodes.length / workflow.progress.totalNodes) * 100}%`
-                            }}
-                          />
-                        </div>
-                      </div>
-                    )}
+                      ) : (
+                        /* Progress - show only if workflow has explicit progress */
+                        workflow.progress && (
+                          <div>
+                            <div className="flex justify-between text-sm mb-1">
+                              <span className="text-gray-600 dark:text-gray-400">Progress</span>
+                              <span className="font-semibold">
+                                {workflow.progress.completedNodes?.length || 0}/{workflow.progress.totalNodes || workflow.nodes?.length || 0}
+                              </span>
+                            </div>
+                            <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2">
+                              <div
+                                className="bg-linear-to-r from-emerald-500 via-teal-400 to-cyan-400 h-2 rounded-full transition-all"
+                                style={{
+                                  width: `${((workflow.progress.completedNodes?.length || 0) / (workflow.progress.totalNodes || workflow.nodes?.length || 1)) * 100}%`
+                                }}
+                              />
+                            </div>
+                          </div>
+                        )
+                      );
+                    })()}
 
                     {/* Metadata */}
                     <div className="flex items-center gap-4 text-sm text-gray-600 dark:text-gray-400">
                       <div className="flex items-center gap-1">
                         <Workflow className="w-4 h-4" />
-                        {workflow.nodes.length} agents
+                        {workflow.nodes?.length || 0} agents
                       </div>
                       <div className="flex items-center gap-1">
                         <Clock className="w-4 h-4" />
-                        {new Date(workflow.updatedAt).toLocaleDateString()}
+                        {workflow.lastRun 
+                          ? `Run ${new Date(workflow.lastRun).toLocaleDateString()}`
+                          : new Date(workflow.updatedAt).toLocaleDateString()
+                        }
                       </div>
                     </div>
 

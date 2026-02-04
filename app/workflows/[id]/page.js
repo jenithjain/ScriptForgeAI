@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import WorkflowCanvas from "@/components/workflow/WorkflowCanvas";
 import { Button } from "@/components/ui/button";
@@ -13,33 +13,81 @@ export default function WorkflowDetailPage() {
   const [workflow, setWorkflow] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    if (params.id) {
-      fetchWorkflow();
-    }
-  }, [params.id]);
-
-  const fetchWorkflow = async () => {
+  const fetchWorkflow = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await fetch(`/api/scriptforge/workflows/list`);
+      // Use dedicated endpoint for single workflow fetch (more efficient)
+      const response = await fetch(`/api/scriptforge/workflows/save?id=${params.id}`);
       const data = await response.json();
       
-      if (data.success) {
-        const found = data.workflows.find(w => w._id === params.id);
-        if (found) {
-          setWorkflow(found);
-        } else {
-          toast.error('Workflow not found');
-          router.push('/workflows');
+      if (data.success && data.workflow) {
+        // Detailed logging to verify DB data
+        console.log('Loaded workflow from DB:', {
+          id: data.workflow._id,
+          name: data.workflow.name,
+          status: data.workflow.status,
+          nodeCount: data.workflow.nodes?.length,
+          nodesWithResults: data.workflow.nodes?.filter(n => n.data?.result).length,
+          nodesWithOutput: data.workflow.nodes?.filter(n => n.data?.output).length,
+          nodeStatuses: data.workflow.nodes?.map(n => ({ id: n.id, type: n.data?.agentType, status: n.data?.status, hasResult: !!n.data?.result }))
+        });
+        setWorkflow(data.workflow);
+      } else {
+        // Fallback to list if not found
+        console.log('Workflow not found via save endpoint, trying list...');
+        const listResponse = await fetch(`/api/scriptforge/workflows/list`);
+        const listData = await listResponse.json();
+        
+        if (listData.success) {
+          const found = listData.workflows.find(w => w._id === params.id);
+          if (found) {
+            setWorkflow(found);
+          } else {
+            toast.error('Workflow not found');
+            router.push('/workflows');
+          }
         }
       }
     } catch (error) {
+      console.error('Error fetching workflow:', error);
       toast.error('Failed to fetch workflow');
     } finally {
       setLoading(false);
     }
-  };
+  }, [params.id, router]);
+
+  // Fetch on mount and when params change
+  useEffect(() => {
+    if (params.id) {
+      fetchWorkflow();
+    }
+  }, [params.id, fetchWorkflow]);
+
+  // Refetch when page becomes visible (e.g., navigating back from story-graph)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && params.id) {
+        console.log('Page visible, refreshing workflow data...');
+        fetchWorkflow();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [params.id, fetchWorkflow]);
+
+  // Also refetch on window focus (handles browser tab switches)
+  useEffect(() => {
+    const handleFocus = () => {
+      if (params.id) {
+        console.log('Window focused, refreshing workflow data...');
+        fetchWorkflow();
+      }
+    };
+
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, [params.id, fetchWorkflow]);
 
   const handleSave = async (nodes, edges) => {
     try {
@@ -82,12 +130,19 @@ export default function WorkflowDetailPage() {
 
       if (data.success) {
         toast.success('Workflow executed successfully');
-        fetchWorkflow();
+        // Update workflow with results from server
+        if (data.workflow) {
+          setWorkflow(data.workflow);
+        } else {
+          fetchWorkflow();
+        }
       } else {
         toast.error(data.error || 'Failed to execute workflow');
+        fetchWorkflow(); // Refresh to get current state
       }
     } catch (error) {
       toast.error('An error occurred');
+      fetchWorkflow();
     }
   };
 
@@ -119,6 +174,7 @@ export default function WorkflowDetailPage() {
         workflow={workflow}
         onSave={handleSave}
         onExecute={handleExecute}
+        onRefresh={fetchWorkflow}
       />
     </div>
   );

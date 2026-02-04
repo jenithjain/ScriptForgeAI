@@ -19,6 +19,7 @@ export interface AgentContext {
   recallAnswers?: RecallAnswer[];
   teaserContent?: TeaserContent;
   previousResults: Record<string, any>;
+  customPrompt?: string | null; // User-provided custom prompt override
 }
 
 export interface StoryContext {
@@ -229,6 +230,19 @@ export interface VisualPrompt {
 }
 
 /**
+ * Build prompt with optional custom instructions
+ */
+function buildPrompt(defaultPrompt: string, customPrompt?: string | null): string {
+  if (customPrompt && customPrompt.trim()) {
+    return `${customPrompt.trim()}
+
+--- DEFAULT CONTEXT (for reference) ---
+${defaultPrompt}`;
+  }
+  return defaultPrompt;
+}
+
+/**
  * Execute a specific agent with the given context
  */
 export async function executeAgent(
@@ -264,7 +278,7 @@ async function executeStoryIntelligence(
   model: any,
   context: AgentContext
 ): Promise<{ result: StoryContext; updatedContext: AgentContext }> {
-  const prompt = `You are the Story Intelligence Core - the brain of the story analysis system.
+  const defaultPrompt = `You are the Story Intelligence Core - the brain of the story analysis system.
 
 STORY/MANUSCRIPT TO ANALYZE:
 ${context.storyBrief}
@@ -304,6 +318,7 @@ Return ONLY a valid JSON object (no markdown, no explanation) with this exact st
   "timePeriod": "when the story takes place"
 }`;
 
+  const prompt = buildPrompt(defaultPrompt, context.customPrompt);
   const response = await generateWithRetry(model, prompt, 3);
   const storyContext = parseJSONFromResponse(response) as StoryContext;
 
@@ -504,7 +519,14 @@ Analyze the temporal structure and causal relationships:
 5. Detect any temporal issues (paradoxes, inconsistencies, gaps)
 6. Assess story duration and pacing
 
-Return ONLY a valid JSON object:
+CRITICAL INSTRUCTIONS:
+- Return ONLY valid JSON, no explanations or markdown
+- Do NOT truncate the response - complete all arrays fully
+- Keep descriptions concise (under 100 words each)
+- Limit to 10 most important events if story is long
+- Ensure all JSON is properly closed with matching braces
+
+Return ONLY this JSON structure (no markdown code blocks):
 {
   "chronologicalEvents": [
     {
@@ -520,32 +542,18 @@ Return ONLY a valid JSON object:
       "type": "action"
     }
   ],
-  "flashbacks": [
-    {
-      "event": { "id": "event-x", "name": "Past Event", "description": "...", "chapter": 3, "timestamp": "5 years ago", "participants": [], "location": "", "causedBy": [], "effects": [], "type": "revelation" },
-      "narrativePosition": 3
-    }
-  ],
+  "flashbacks": [],
   "flashForwards": [],
   "causalChains": [
     {
       "cause": "event-1",
-      "effects": ["event-2", "event-3"],
+      "effects": ["event-2"],
       "validated": true
     }
   ],
-  "temporalIssues": [
-    {
-      "id": "issue-1",
-      "type": "inconsistency|paradox|gap|overlap",
-      "description": "what the issue is",
-      "severity": "low|medium|high|critical",
-      "affectedEvents": ["event-1", "event-2"],
-      "suggestion": "how to fix"
-    }
-  ],
-  "storyDuration": "total time span of story",
-  "narrativePace": "assessment of pacing"
+  "temporalIssues": [],
+  "storyDuration": "total time span",
+  "narrativePace": "fast|moderate|slow with brief explanation"
 }`;
 
   const response = await generateWithRetry(model, prompt, 3);

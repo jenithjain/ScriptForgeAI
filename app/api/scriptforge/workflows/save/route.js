@@ -4,6 +4,55 @@ import { authOptions } from '@/lib/auth-options';
 import connectDB from '@/lib/mongodb';
 import ScriptWorkflow from '@/lib/models/ScriptWorkflow';
 
+// GET a single workflow by ID
+export async function GET(req) {
+  try {
+    const session = await getServerSession(authOptions);
+    
+    if (!session?.user) {
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
+
+    await connectDB();
+
+    const { searchParams } = new URL(req.url);
+    const workflowId = searchParams.get('id');
+
+    if (!workflowId) {
+      return NextResponse.json(
+        { error: 'Workflow ID is required' },
+        { status: 400 }
+      );
+    }
+
+    const workflow = await ScriptWorkflow.findOne({
+      _id: workflowId,
+      userId: session.user.id
+    });
+
+    if (!workflow) {
+      return NextResponse.json(
+        { error: 'Workflow not found' },
+        { status: 404 }
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+      workflow
+    });
+  } catch (error) {
+    console.error('Error fetching workflow:', error);
+    return NextResponse.json(
+      { error: 'Failed to fetch workflow' },
+      { status: 500 }
+    );
+  }
+}
+
 export async function PUT(req) {
   try {
     const session = await getServerSession(authOptions);

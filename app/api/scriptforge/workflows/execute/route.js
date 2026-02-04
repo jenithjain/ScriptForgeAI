@@ -7,27 +7,40 @@ import { AGENT_DEFINITIONS } from '@/lib/agents/definitions';
 import { executeAgent } from '@/lib/agents/agent-executor';
 
 /**
+ * Deep clone helper for safely modifying nested objects
+ */
+function deepClone(obj) {
+  return JSON.parse(JSON.stringify(obj));
+}
+
+/**
  * Execute a single agent within a workflow
  */
-async function executeSingleAgent(workflow, nodeId, agentType) {
+async function executeSingleAgent(workflow, nodeId, agentType, customPrompt = null) {
   try {
-    const node = workflow.nodes.find(n => n.id === nodeId);
-    if (!node) {
+    // Deep clone nodes to ensure Mongoose detects changes
+    let nodesClone = deepClone(workflow.nodes);
+    const nodeIndex = nodesClone.findIndex(n => n.id === nodeId);
+    
+    if (nodeIndex === -1) {
       return NextResponse.json(
         { error: 'Node not found in workflow' },
         { status: 404 }
       );
     }
+    
+    const node = nodesClone[nodeIndex];
 
     // Build context from workflow and any previously executed agents
     let agentContext = {
       storyBrief: workflow.brief || '',
       manuscript: workflow.inputs?.manuscript || workflow.inputs?.fullText || '',
-      previousResults: {}
+      previousResults: {},
+      customPrompt: customPrompt || node.data.customPrompt || null,
     };
 
     // Collect results from previously executed agents
-    for (const n of workflow.nodes) {
+    for (const n of nodesClone) {
       if (n.id !== nodeId && n.data.result) {
         agentContext.previousResults[n.data.agentType] = n.data.result;
         
@@ -48,9 +61,17 @@ async function executeSingleAgent(workflow, nodeId, agentType) {
       }
     }
 
-    // Update node status to running
+    // Update node status to running and store custom prompt if provided
     node.data.status = 'running';
+    if (customPrompt) {
+      node.data.customPrompt = customPrompt;
+    }
+    
+    // Reassign the entire nodes array to ensure Mongoose detects the change
+    workflow.nodes = nodesClone;
+    workflow.markModified('nodes');
     await workflow.save();
+    console.log(`Saved workflow with node ${nodeId} status: running`);
 
     // Execute the agent
     const effectiveAgentType = agentType || node.data.agentType;
@@ -58,39 +79,69 @@ async function executeSingleAgent(workflow, nodeId, agentType) {
     
     const { result, updatedContext } = await executeAgent(effectiveAgentType, agentContext);
 
-    // Update node with results
-    node.data.status = 'success';
-    node.data.result = result;
-    node.data.output = formatAgentOutput(effectiveAgentType, result);
-    node.data.input = {
-      storyBrief: agentContext.storyBrief?.substring(0, 500) + '...',
-      hasManuscript: !!agentContext.manuscript,
-      previousAgents: Object.keys(agentContext.previousResults)
-    };
+    // Update node with results - re-clone to get fresh state
+    nodesClone = deepClone(workflow.nodes);
+    const updatedNode = nodesClone.find(n => n.id === nodeId);
+    if (updatedNode) {
+      updatedNode.data.status = 'success';
+      updatedNode.data.result = result;
+      updatedNode.data.output = formatAgentOutput(effectiveAgentType, result);
+      updatedNode.data.input = {
+        storyBrief: agentContext.storyBrief?.substring(0, 500) + '...',
+        hasManuscript: !!agentContext.manuscript,
+        previousAgents: Object.keys(agentContext.previousResults)
+      };
+    }
 
     // Update workflow analysis context
-    workflow.analysisContext = {
-      ...workflow.analysisContext,
+    const newAnalysisContext = {
+      ...(workflow.analysisContext || {}),
       ...updatedContext
     };
     
+    // Reassign arrays/objects completely to force Mongoose to detect changes
+    workflow.nodes = nodesClone;
+    workflow.analysisContext = newAnalysisContext;
+    workflow.markModified('nodes');
+    workflow.markModified('analysisContext');
+    
     await workflow.save();
+    console.log(`Saved workflow with node ${nodeId} status: success, result keys:`, result ? Object.keys(result) : 'null');
+
+    // Convert to plain object for response - use updatedNode which has the result
+    const nodeDataResponse = {
+      ...updatedNode.data,
+      status: 'success',
+      result: result,
+      output: formatAgentOutput(effectiveAgentType, result),
+      input: updatedNode.data.input
+    };
+
+    console.log('Returning nodeData:', nodeDataResponse);
 
     return NextResponse.json({
       success: true,
       result: result,
-      nodeData: node.data,
+      nodeData: nodeDataResponse,
       message: `${effectiveAgentType} executed successfully`
     });
   } catch (error) {
     console.error(`Error executing single agent:`, error);
     
-    // Update node with error
-    const node = workflow.nodes.find(n => n.id === nodeId);
-    if (node) {
-      node.data.status = 'error';
-      node.data.error = error.message;
-      await workflow.save();
+    // Update node with error using deep clone approach
+    try {
+      const errorNodesClone = deepClone(workflow.nodes);
+      const errorNode = errorNodesClone.find(n => n.id === nodeId);
+      if (errorNode) {
+        errorNode.data.status = 'error';
+        errorNode.data.error = error.message;
+        workflow.nodes = errorNodesClone;
+        workflow.markModified('nodes');
+        await workflow.save();
+        console.log(`Saved workflow with node ${nodeId} status: error`);
+      }
+    } catch (saveError) {
+      console.error('Failed to save error state:', saveError);
     }
 
     return NextResponse.json({
@@ -114,7 +165,7 @@ export async function POST(req) {
     await connectDB();
 
     const body = await req.json();
-    const { workflowId, singleAgentId, agentType: requestedAgentType } = body;
+    const { workflowId, singleAgentId, agentType: requestedAgentType, customPrompt } = body;
 
     if (!workflowId) {
       return NextResponse.json(
@@ -137,19 +188,24 @@ export async function POST(req) {
 
     // Handle single agent execution
     if (singleAgentId) {
-      return await executeSingleAgent(workflow, singleAgentId, requestedAgentType);
+      return await executeSingleAgent(workflow, singleAgentId, requestedAgentType, customPrompt);
     }
 
     // Full workflow execution
-    // Update status to running
+    // Update status to running - use deep clone approach
+    let nodesClone = deepClone(workflow.nodes);
+    
     workflow.status = 'running';
     workflow.lastRun = new Date();
     workflow.progress = {
-      currentNode: workflow.nodes[0]?.id,
+      currentNode: nodesClone[0]?.id,
       completedNodes: [],
-      totalNodes: workflow.nodes.length,
+      totalNodes: nodesClone.length,
       errors: []
     };
+    workflow.nodes = nodesClone;
+    workflow.markModified('nodes');
+    workflow.markModified('progress');
     await workflow.save();
 
     // Execute workflow nodes sequentially using the specialized agent executor
@@ -163,10 +219,15 @@ export async function POST(req) {
       previousResults: {}
     };
 
-    for (const node of workflow.nodes) {
+    for (let i = 0; i < nodesClone.length; i++) {
+      const node = nodesClone[i];
       try {
-        workflow.progress.currentNode = node.id;
+        // Update node to running
         node.data.status = 'running';
+        workflow.progress.currentNode = node.id;
+        workflow.nodes = deepClone(nodesClone);
+        workflow.markModified('nodes');
+        workflow.markModified('progress');
         await workflow.save();
 
         const agentType = node.data.agentType;
@@ -178,7 +239,6 @@ export async function POST(req) {
           hasManuscript: !!agentContext.manuscript,
           previousAgents: Object.keys(agentContext.previousResults)
         };
-        await workflow.save();
 
         // Execute the specialized agent with shared context
         console.log(`Executing specialized agent: ${agentType}`);
@@ -198,9 +258,17 @@ export async function POST(req) {
         node.data.status = 'success';
         node.data.result = result;
         node.data.output = formatAgentOutput(agentType, result);
+        
+        // Update progress
         workflow.progress.completedNodes.push(node.id);
         
+        // Reassign the entire nodes array to ensure save
+        workflow.nodes = deepClone(nodesClone);
+        workflow.markModified('nodes');
+        workflow.markModified('progress');
         await workflow.save();
+        console.log(`Saved workflow with node ${node.id} (${agentType}) status: success`);
+        
       } catch (error) {
         console.error(`Error executing node ${node.id}:`, error);
         node.data.status = 'error';
@@ -209,6 +277,9 @@ export async function POST(req) {
           nodeId: node.id,
           error: error.message
         });
+        workflow.nodes = deepClone(nodesClone);
+        workflow.markModified('nodes');
+        workflow.markModified('progress');
         await workflow.save();
         // Continue to next agent instead of breaking - allow partial success
         continue;
@@ -224,7 +295,13 @@ export async function POST(req) {
     // Store the full context for knowledge graph visualization
     workflow.analysisContext = agentContext;
     
+    // Final save with all nodes including their results
+    workflow.nodes = deepClone(nodesClone);
+    workflow.markModified('nodes');
+    workflow.markModified('progress');
+    workflow.markModified('analysisContext');
     await workflow.save();
+    console.log('Final workflow save complete. Nodes with results:', nodesClone.filter(n => n.data.result).length);
 
     return NextResponse.json({
       success: !allFailed,
