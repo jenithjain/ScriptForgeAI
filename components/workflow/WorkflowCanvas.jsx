@@ -23,10 +23,11 @@ import AgentModules from './AgentModules';
 import AgentNode from './AgentNode';
 import AgentDetailModal from './AgentDetailModal';
 import AgentIcon from './AgentIcon';
+import ManuscriptInputModal from './ManuscriptInputModal';
 import { AGENT_DEFINITIONS } from '@/lib/agents/definitions';
 import {
   ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Play, Save, Settings,
-  Loader2, CheckCircle, XCircle, Sparkles, X, Home, Brain, Download, Upload
+  Loader2, CheckCircle, XCircle, Sparkles, X, Home, Brain, Download, Upload, Network
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -90,6 +91,7 @@ export default function WorkflowCanvas({
   const [isGeneratingStrategy, setIsGeneratingStrategy] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [expandedAgentId, setExpandedAgentId] = useState(null);
+  const [showManuscriptModal, setShowManuscriptModal] = useState(false);
 
   // Theme detection
   useEffect(() => {
@@ -383,8 +385,14 @@ export default function WorkflowCanvas({
 
   const handleExecute = async () => {
     setIsExecuting(true);
-    await onExecute?.();
-    setIsExecuting(false);
+    try {
+      await onExecute?.();
+    } catch (error) {
+      console.error('Workflow execution error:', error);
+      toast.error('Workflow execution failed');
+    } finally {
+      setIsExecuting(false);
+    }
   };
 
   const handleExportWorkflow = () => {
@@ -735,6 +743,15 @@ export default function WorkflowCanvas({
           isOpen={showDetailModal}
           onClose={() => setShowDetailModal(false)}
           onRunAgent={handleRunAgentFromModal}
+        />
+
+        {/* Manuscript Input Modal for Story Intelligence */}
+        <ManuscriptInputModal
+          isOpen={showManuscriptModal}
+          onClose={() => setShowManuscriptModal(false)}
+          onAnalysisComplete={(result) => {
+            console.log('Analysis complete:', result);
+          }}
         />
 
         {/* Right Sidebar - Available Modules (Top to Bottom) */}

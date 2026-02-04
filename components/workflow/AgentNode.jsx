@@ -4,10 +4,19 @@ import { Handle, Position } from 'reactflow';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, CheckCircle, XCircle, Play, Eye } from 'lucide-react';
+import { Loader2, CheckCircle, XCircle, Play, Eye, Network } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import AgentIcon from './AgentIcon';
 
 export default function AgentNode({ data, isConnectable, id }) {
+  const router = useRouter();
+  const isKnowledgeGraphAgent = data?.agentType === 'knowledge-graph' || data?.type === 'knowledge-graph';
+
+  const handleOpenKnowledgeGraph = (e) => {
+    e.stopPropagation();
+    router.push('/story-graph');
+  };
+
   const getStatusColor = () => {
     switch (data.status) {
       case 'running': return 'border-amber-500/50';
@@ -44,9 +53,13 @@ export default function AgentNode({ data, isConnectable, id }) {
       />
       
       <Card 
-        className={`w-[280px] bg-card/95 backdrop-blur-xl border ${getStatusColor()} hover:border-emerald-500/50 transition-all hover:shadow-xl group relative overflow-hidden cursor-pointer`}
+        className={`w-[280px] bg-card/95 backdrop-blur-xl border ${getStatusColor()} hover:border-emerald-500/50 transition-all hover:shadow-xl group relative overflow-hidden cursor-pointer ${data.status === 'running' ? 'animate-glow-pulse' : ''}`}
         onClick={() => data.onNodeClick?.(id, data)}
       >
+        {/* Glow overlay when running */}
+        {data.status === 'running' && (
+          <div className="absolute inset-0 bg-gradient-to-r from-amber-500/10 via-orange-500/10 to-amber-500/10 animate-shimmer pointer-events-none" />
+        )}
         {/* Colored top border accent */}
         <div 
           className="absolute top-0 left-0 right-0 h-1"
@@ -102,28 +115,54 @@ export default function AgentNode({ data, isConnectable, id }) {
 
           {/* Action Buttons */}
           <div className="flex gap-2">
-            <Button
-              size="sm"
-              className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white font-semibold text-xs h-8 shadow-lg shadow-emerald-500/20 transition-all"
-              onClick={(e) => {
-                e.stopPropagation();
-                data.onRun?.(data.agentType);
-              }}
-            >
-              <Play className="w-3 h-3 mr-1.5" />
-              Run
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="px-3 h-8 border-border text-muted-foreground hover:text-foreground hover:bg-accent"
-              onClick={(e) => {
-                e.stopPropagation();
-                data.onNodeClick?.(id, data);
-              }}
-            >
-              <Eye className="w-3 h-3" />
-            </Button>
+            {isKnowledgeGraphAgent ? (
+              <>
+                <Button
+                  size="sm"
+                  className="flex-1 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white font-semibold text-xs h-8 shadow-lg transition-all"
+                  onClick={handleOpenKnowledgeGraph}
+                >
+                  <Network className="w-3 h-3 mr-1.5" />
+                  View Graph
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="px-3 h-8 border-border text-muted-foreground hover:text-foreground hover:bg-accent"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    data.onRun?.(data.agentType);
+                  }}
+                >
+                  <Play className="w-3 h-3" />
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button
+                  size="sm"
+                  className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white font-semibold text-xs h-8 shadow-lg shadow-emerald-500/20 transition-all"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    data.onRun?.(data.agentType);
+                  }}
+                >
+                  <Play className="w-3 h-3 mr-1.5" />
+                  Run
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="px-3 h-8 border-border text-muted-foreground hover:text-foreground hover:bg-accent"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    data.onNodeClick?.(id, data);
+                  }}
+                >
+                  <Eye className="w-3 h-3" />
+                </Button>
+              </>
+            )}
           </div>
 
           {/* Output Preview */}

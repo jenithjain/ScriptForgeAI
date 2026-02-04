@@ -6,15 +6,24 @@ import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Copy, CheckCircle, XCircle, Loader2, Play } from 'lucide-react';
+import { Copy, CheckCircle, XCircle, Loader2, Play, Network, ExternalLink } from 'lucide-react';
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import AgentIcon from './AgentIcon';
 
 export default function AgentDetailModal({ agent, isOpen, onClose, onRunAgent }) {
   const [copiedInput, setCopiedInput] = useState(false);
   const [copiedOutput, setCopiedOutput] = useState(false);
+  const router = useRouter();
 
   if (!agent) return null;
+
+  const isKnowledgeGraphAgent = agent.data?.agentType === 'knowledge-graph' || agent.data?.type === 'knowledge-graph';
+  const isStoryIntelligenceAgent = agent.data?.agentType === 'story-intelligence' || agent.data?.type === 'story-intelligence';
+
+  const handleOpenKnowledgeGraph = () => {
+    router.push('/story-graph');
+  };
 
   const handleCopy = async (text, type) => {
     await navigator.clipboard.writeText(text);
@@ -110,13 +119,25 @@ export default function AgentDetailModal({ agent, isOpen, onClose, onRunAgent })
             </div>
             
             {agent.data.status !== 'running' && (
-              <Button
-                onClick={() => onRunAgent?.(agent)}
-                className="bg-emerald-500 hover:bg-emerald-600 text-white shadow-lg"
-              >
-                <Play className="w-4 h-4 mr-2" />
-                Run Agent
-              </Button>
+              <div className="flex flex-col gap-2">
+                {isKnowledgeGraphAgent && (
+                  <Button
+                    onClick={handleOpenKnowledgeGraph}
+                    className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white shadow-lg"
+                  >
+                    <Network className="w-4 h-4 mr-2" />
+                    Open 3D Graph
+                    <ExternalLink className="w-3 h-3 ml-2" />
+                  </Button>
+                )}
+                <Button
+                  onClick={() => onRunAgent?.(agent)}
+                  className="bg-emerald-500 hover:bg-emerald-600 text-white shadow-lg"
+                >
+                  <Play className="w-4 h-4 mr-2" />
+                  Run Agent
+                </Button>
+              </div>
             )}
           </div>
         </DialogHeader>
