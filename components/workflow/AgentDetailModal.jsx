@@ -7,8 +7,8 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
-import { Copy, CheckCircle, XCircle, Loader2, Play, Network, ExternalLink, Edit2, Save, Code, FileText } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { Copy, CheckCircle, XCircle, Loader2, Play, Network, ExternalLink, Edit2, Save, Code, FileText, Video, Film, RefreshCw } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import ReactMarkdown from 'react-markdown';
 import AgentIcon from './AgentIcon';
@@ -19,7 +19,138 @@ export default function AgentDetailModal({ agent, isOpen, onClose, onRunAgent })
   const [isEditingPrompt, setIsEditingPrompt] = useState(false);
   const [editedPrompt, setEditedPrompt] = useState('');
   const [viewMode, setViewMode] = useState('markdown'); // 'markdown' or 'json'
+  const [videoGenerations, setVideoGenerations] = useState({}); // Track video generation status per prompt
+  const [generatedVideos, setGeneratedVideos] = useState({}); // Store completed video URLs
+  const [isLoadingVideos, setIsLoadingVideos] = useState(false);
   const router = useRouter();
+
+  // Get workflow and agent info for API calls
+  const getWorkflowInfo = useCallback(() => {
+    if (!agent?.data) return null;
+    return {
+      workflowId: agent.data.workflowId,
+      agentType: agent.data.agentType || agent.data.type || 'cinematic-teaser',
+      agentId: agent.data.id || agent.id,
+      projectName: agent.data.projectName || agent.data.workflowName
+    };
+  }, [agent]);
+
+  // Load video data from database
+  const loadVideoData = useCallback(async () => {
+    const info = getWorkflowInfo();
+    if (!info?.workflowId) {
+      console.log('No workflowId available, skipping video load');
+      return;
+    }
+    
+    setIsLoadingVideos(true);
+    
+    try {
+      console.log('Loading videos from database for:', info);
+      
+      const response = await fetch(
+        `/api/scriptforge/generated-videos?workflowId=${encodeURIComponent(info.workflowId)}&agentType=${encodeURIComponent(info.agentType)}`
+      );
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch videos');
+      }
+      
+      const data = await response.json();
+      console.log('Loaded videos from DB:', data);
+      
+      if (data.success && data.videos?.[info.agentType]) {
+        const agentVideos = data.videos[info.agentType];
+        setGeneratedVideos(agentVideos.videos || {});
+        setVideoGenerations(agentVideos.statuses || {});
+        console.log('Set videos:', agentVideos.videos);
+        console.log('Set statuses:', agentVideos.statuses);
+      }
+    } catch (error) {
+      console.error('Failed to load video data from database:', error);
+    } finally {
+      setIsLoadingVideos(false);
+    }
+  }, [getWorkflowInfo]);
+
+  // Load data when component mounts or agent changes
+  useEffect(() => {
+    if (agent?.data && isOpen) {
+      loadVideoData();
+    }
+  }, [agent, isOpen, loadVideoData]);
+
+  // Reload data when user returns to browser tab (focus event)
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleWindowFocus = () => {
+      console.log('Window focused - reloading video data...');
+      loadVideoData();
+    };
+
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        console.log('Tab became visible - reloading video data...');
+        loadVideoData();
+      }
+    };
+
+    // Listen for both focus and visibility change events
+    window.addEventListener('focus', handleWindowFocus);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener('focus', handleWindowFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [isOpen, loadVideoData]);
+
+  // Verify that saved video URLs still exist
+  const verifyVideoExists = useCallback(async (videoUrl) => {
+    try {
+      const response = await fetch(videoUrl, { method: 'HEAD' });
+      return response.ok;
+    } catch {
+      return false;
+    }
+  }, []);
+
+  // Clean up stale video data
+  const cleanupStaleData = useCallback(async () => {
+    const videoEntries = Object.entries(generatedVideos);
+    if (videoEntries.length === 0) return;    const validVideos = {};
+    const validGenerations = { ...videoGenerations };
+
+    for (const [key, videoUrl] of videoEntries) {
+      const exists = await verifyVideoExists(videoUrl);
+      if (exists) {
+        validVideos[key] = videoUrl;
+      } else {
+        // Remove stale generation status too
+        delete validGenerations[key];
+        console.log('Removed stale video data for:', key);
+      }
+    }
+
+    // Update states if any videos were removed
+    if (Object.keys(validVideos).length !== Object.keys(generatedVideos).length) {
+      setGeneratedVideos(validVideos);
+      setVideoGenerations(validGenerations);
+    }
+  }, [generatedVideos, videoGenerations, verifyVideoExists]);
+
+  // Verify videos exist when component mounts
+  useEffect(() => {
+    if (isOpen && Object.keys(generatedVideos).length > 0) {
+      // Delay verification to avoid blocking UI
+      const timer = setTimeout(() => {
+        cleanupStaleData();
+      }, 1000);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [isOpen, generatedVideos, cleanupStaleData]);
 
   // Initialize edited prompt when agent changes
   useEffect(() => {
@@ -28,6 +159,187 @@ export default function AgentDetailModal({ agent, isOpen, onClose, onRunAgent })
       setIsEditingPrompt(false);
     }
   }, [agent]);
+
+  // Wrapper functions for video state updates
+  const updateVideoGenerations = useCallback((updater) => {
+    setVideoGenerations(prev => {
+      const newState = typeof updater === 'function' ? updater(prev) : updater;
+      return newState;
+    });
+  }, []);
+
+  const updateGeneratedVideos = useCallback((updater) => {
+    setGeneratedVideos(prev => {
+      const newState = typeof updater === 'function' ? updater(prev) : updater;
+      return newState;
+    });
+  }, []);
+
+  // Video generation function using Veo 3.1
+  const generateVideo = useCallback(async (promptIndex, promptText, promptData = {}) => {
+    const promptKey = `prompt_${promptIndex}`;
+    const info = getWorkflowInfo();
+    
+    // Set loading state
+    updateVideoGenerations(prev => ({
+      ...prev,
+      [promptKey]: { status: 'starting', message: 'Starting video generation...' }
+    }));
+
+    try {
+      // Start video generation with all metadata for proper naming and DB storage
+      const response = await fetch('/api/scriptforge/generate-video', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt: promptText,
+          aspectRatio: '16:9',
+          duration: 5,
+          // Pass workflow and scene metadata for proper naming
+          workflowId: info?.workflowId,
+          agentType: info?.agentType,
+          agentId: info?.agentId,
+          promptIndex,
+          promptKey,
+          sceneName: promptData.scene || promptData.sceneName || `scene_${promptIndex + 1}`,
+          sceneDetails: {
+            location: promptData.location,
+            characters: promptData.characters,
+            mood: promptData.mood,
+            tone: promptData.tone,
+            cameraAngle: promptData.cameraAngle
+          },
+          projectName: info?.projectName || 'draft'
+        })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to start video generation');
+      }
+
+      // Check if this is concept-only mode or API error (no polling needed)
+      if (data.mode === 'concept-only' || data.status === 'concept_only' || data.status === 'concept_ready' || data.shouldPoll === false) {
+        // API unavailable - show concept mode
+        updateVideoGenerations(prev => ({
+          ...prev,
+          [promptKey]: { 
+            status: 'concept', 
+            message: data.message || data.error || 'Video generation unavailable. Use the prompt in Google AI Studio.',
+            concept: data.concept,
+            fallbackUrl: data.fallbackUrl
+          }
+        }));
+        return;
+      }
+
+      // Only poll if we have a valid operationId
+      const operationId = data.operationId;
+      if (!operationId) {
+        updateVideoGenerations(prev => ({
+          ...prev,
+          [promptKey]: { 
+            status: 'concept', 
+            message: 'Video generation started but no operation ID returned. Try again.',
+          }
+        }));
+        return;
+      }
+
+      updateVideoGenerations(prev => ({
+        ...prev,
+        [promptKey]: { status: 'processing', message: 'Generating video... This may take 30s-2min', operationId }
+      }));
+
+      // Start polling
+      pollVideoStatus(promptKey, operationId);
+
+    } catch (error) {
+      console.error('Video generation error:', error);
+      updateVideoGenerations(prev => ({
+        ...prev,
+        [promptKey]: { status: 'error', message: error.message }
+      }));
+    }
+  }, []);
+
+  // Poll for video generation status
+  const pollVideoStatus = useCallback(async (promptKey, operationId) => {
+    let attempts = 0;
+    const maxAttempts = 60; // 5 minutes max (5s intervals)
+    
+    const poll = async () => {
+      if (attempts >= maxAttempts) {
+        updateVideoGenerations(prev => ({
+          ...prev,
+          [promptKey]: { status: 'timeout', message: 'Video generation timed out. Please try again.' }
+        }));
+        return;
+      }
+
+      try {
+        const response = await fetch(`/api/scriptforge/generate-video?operationId=${encodeURIComponent(operationId)}`);
+        const data = await response.json();
+
+        if (data.status === 'completed' && data.videoUrl) {
+          // Video ready!
+          updateGeneratedVideos(prev => ({
+            ...prev,
+            [promptKey]: data.videoUrl
+          }));
+          updateVideoGenerations(prev => ({
+            ...prev,
+            [promptKey]: { status: 'completed', message: 'Video generated successfully!' }
+          }));
+          return;
+        }
+
+        if (data.status === 'failed' || data.status === 'error' || data.shouldPoll === false) {
+          updateVideoGenerations(prev => ({
+            ...prev,
+            [promptKey]: { status: 'error', message: data.error || 'Video generation failed' }
+          }));
+          return;
+        }
+
+        if (data.status === 'not_found') {
+          updateVideoGenerations(prev => ({
+            ...prev,
+            [promptKey]: { status: 'error', message: 'Operation expired. Please try again.' }
+          }));
+          return;
+        }
+
+        if (data.status === 'concept-only') {
+          updateVideoGenerations(prev => ({
+            ...prev,
+            [promptKey]: { status: 'concept', message: data.message }
+          }));
+          return;
+        }
+
+        // Still processing - continue polling
+        attempts++;
+        updateVideoGenerations(prev => ({
+          ...prev,
+          [promptKey]: { 
+            status: 'processing', 
+            message: `Generating video... (${attempts * 5}s elapsed)`,
+            operationId 
+          }
+        }));
+        
+        setTimeout(poll, 5000); // Poll every 5 seconds
+      } catch (error) {
+        console.error('Poll error:', error);
+        attempts++;
+        setTimeout(poll, 5000);
+      }
+    };
+
+    poll();
+  }, []);
 
   if (!agent) return null;
 
@@ -522,26 +834,121 @@ export default function AgentDetailModal({ agent, isOpen, onClose, onRunAgent })
     }
     
     // Handle cinematic teaser results
-    if (result.trailerScript || result.visualPrompts || result.teaserText) {
+    if (result.trailerScript || result.visualPrompts || result.teaserText || result.essence) {
       markdown += `## 🎬 Cinematic Teaser\n\n`;
-      if (result.teaserText) markdown += `${result.teaserText}\n\n`;
-      if (result.trailerScript) {
-        markdown += `### 🎥 Trailer Script\n\n`;
-        markdown += `${result.trailerScript}\n\n`;
+      
+      // Story Essence
+      if (result.essence) {
+        markdown += `### 🎯 Story Essence\n\n`;
+        if (result.essence.genre) markdown += `**Genre:** ${result.essence.genre}\n\n`;
+        if (result.essence.mainConflict) markdown += `**Main Conflict:** ${result.essence.mainConflict}\n\n`;
+        if (result.essence.mood) markdown += `**Mood:** ${result.essence.mood}\n\n`;
+        if (result.essence.hook) markdown += `**Hook:** *"${result.essence.hook}"*\n\n`;
+        if (result.essence.tone) {
+          markdown += `**Tone Suggestions:**\n`;
+          if (result.essence.tone.visual) markdown += `- 🎨 Visual: ${result.essence.tone.visual}\n`;
+          if (result.essence.tone.emotional) markdown += `- 💭 Emotional: ${result.essence.tone.emotional}\n`;
+          if (result.essence.tone.pacing) markdown += `- ⚡ Pacing: ${result.essence.tone.pacing}\n`;
+          markdown += '\n';
+        }
+        if (result.essence.keyMoments?.length) {
+          markdown += `**Key Moments:**\n`;
+          result.essence.keyMoments.forEach((moment, i) => {
+            markdown += `${i + 1}. ${moment}\n`;
+          });
+          markdown += '\n';
+        }
       }
+      
+      if (result.teaserText) markdown += `${result.teaserText}\n\n`;
+      
+      // Teaser Script
+      if (result.teaserScript) {
+        markdown += `### 🎥 Trailer Script\n\n`;
+        if (typeof result.teaserScript === 'string') {
+          markdown += `${result.teaserScript}\n\n`;
+        } else {
+          if (result.teaserScript.duration) markdown += `**Duration:** ${result.teaserScript.duration}s\n\n`;
+          if (result.teaserScript.narration?.length) {
+            markdown += `**Narration:**\n`;
+            result.teaserScript.narration.forEach((line, i) => {
+              markdown += `> ${line}\n\n`;
+            });
+          }
+          if (result.teaserScript.musicSuggestion) {
+            const music = result.teaserScript.musicSuggestion;
+            if (typeof music === 'string') {
+              markdown += `**🎵 Music:** ${music}\n\n`;
+            } else {
+              markdown += `**🎵 Music Suggestion:**\n`;
+              if (music.genre) markdown += `- Genre: ${music.genre}\n`;
+              if (music.mood) markdown += `- Mood: ${music.mood}\n`;
+              if (music.reference) markdown += `- Reference: ${music.reference}\n`;
+              markdown += '\n';
+            }
+          }
+          if (result.teaserScript.pacing) markdown += `**Pacing:** ${result.teaserScript.pacing}\n\n`;
+        }
+      }
+      
+      // Visual Prompts - Enhanced display
       if (result.visualPrompts?.length) {
-        markdown += `### 🖼️ Visual Prompts\n\n`;
+        markdown += `### 🖼️ Visual Prompts (click to preview atmosphere & emotion)\n\n`;
         result.visualPrompts.forEach((prompt, i) => {
           if (typeof prompt === 'string') {
-            markdown += `${i + 1}. ${prompt}\n`;
+            markdown += `**${i + 1}.** ${prompt}\n\n`;
           } else {
-            markdown += `${i + 1}. **${prompt.scene || `Scene ${i+1}`}**: ${prompt.description || ''}\n`;
+            markdown += `**${i + 1}. ${prompt.scene || `Scene ${i+1}`}**\n`;
+            if (prompt.location) markdown += `📍 *${prompt.location}*\n`;
+            if (prompt.characters?.length) markdown += `👥 *Characters: ${prompt.characters.join(', ')}*\n`;
+            if (prompt.mood || prompt.tone) {
+              markdown += `🎭 *Mood: ${prompt.mood || ''} ${prompt.tone ? `| Tone: ${prompt.tone}` : ''}*\n`;
+            }
+            if (prompt.cameraAngle) markdown += `📷 *Camera: ${prompt.cameraAngle}*\n`;
+            markdown += `\n${prompt.prompt || prompt.description || ''}\n`;
+            if (prompt.storyContext) markdown += `\n> 💡 *${prompt.storyContext}*\n`;
+            markdown += '\n---\n\n';
           }
+        });
+        markdown += `*🎬 Use "Visualize This" buttons below to quickly see the atmosphere and emotional tone.*\n\n`;
+      }
+      
+      // Hooks
+      if (result.hooks?.length) {
+        markdown += `### 🪝 Hook Lines\n\n`;
+        result.hooks.forEach((hook, i) => {
+          markdown += `${i + 1}. *"${hook}"*\n`;
         });
         markdown += '\n';
       }
-      if (result.hookLine) markdown += `**Hook:** *"${result.hookLine}"*\n\n`;
-      if (result.mood) markdown += `**Mood:** ${result.mood}\n\n`;
+      
+      // Tagline
+      if (result.tagline) markdown += `### ⭐ Tagline\n\n> **"${result.tagline}"**\n\n`;
+      
+      // Creative Suggestions
+      if (result.creativeSuggestions) {
+        markdown += `### 💡 Creative Suggestions\n\n`;
+        if (result.creativeSuggestions.targetAudience) {
+          markdown += `**Target Audience:** ${result.creativeSuggestions.targetAudience}\n\n`;
+        }
+        if (result.creativeSuggestions.alternativeTones?.length) {
+          markdown += `**Alternative Tones:**\n`;
+          result.creativeSuggestions.alternativeTones.forEach(alt => {
+            markdown += `- **${alt.tone}:** ${alt.description}\n`;
+          });
+          markdown += '\n';
+        }
+        if (result.creativeSuggestions.visualStyles?.length) {
+          markdown += `**Visual Style Options:**\n`;
+          result.creativeSuggestions.visualStyles.forEach(style => {
+            markdown += `- **${style.style}:** ${style.description}\n`;
+          });
+          markdown += '\n';
+        }
+      }
+      
+      if (result.hookLine && !result.hooks) markdown += `**Hook:** *"${result.hookLine}"*\n\n`;
+      if (result.mood && !result.essence?.mood) markdown += `**Mood:** ${result.mood}\n\n`;
     }
     
     // If nothing specific matched, show a generic but nice summary
@@ -588,6 +995,230 @@ export default function AgentDetailModal({ agent, isOpen, onClose, onRunAgent })
 
   const handleRunWithPrompt = () => {
     onRunAgent?.(agent, editedPrompt);
+  };
+
+  // Check if this agent has visual prompts (for cinematic teaser)
+  const hasVisualPrompts = agent.data?.result?.visualPrompts?.length > 0;
+  const isCinematicTeaserAgent = agent.data?.agentType === 'cinematic-teaser' || agent.data?.type === 'cinematic-teaser' || hasVisualPrompts;
+
+  // Render Visual Prompts with Video Generation
+  const renderVisualPromptsWithVideo = () => {
+    const result = agent.data?.result;
+    if (!result?.visualPrompts?.length) return null;
+
+    return (
+      <div className="mt-6 space-y-4">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <Film className="w-5 h-5 text-purple-500" />
+            <h3 className="text-lg font-semibold text-foreground">Visual Ideation Preview</h3>
+          </div>
+          <Button
+            onClick={() => {
+              console.log('Manual refresh triggered');
+              loadVideoData();
+            }}
+            variant="ghost"
+            size="sm"
+            className="text-muted-foreground hover:text-foreground"
+          >
+            <RefreshCw className="w-4 h-4" />
+          </Button>
+        </div>
+        <p className="text-sm text-muted-foreground mb-4">
+          Generate quick visual previews to help you <span className="text-purple-400 font-medium">see the atmosphere, feel the emotion, and visualize relationships</span> in your scenes.
+        </p>
+        
+        <div className="space-y-4">
+          {result.visualPrompts.map((prompt, index) => {
+            const promptKey = `prompt_${index}`;
+            const promptText = typeof prompt === 'string' ? prompt : (prompt.prompt || prompt.description || prompt.scene || '');
+            const sceneName = typeof prompt === 'object' ? (prompt.scene || `Scene ${index + 1}`) : `Prompt ${index + 1}`;
+            const videoStatus = videoGenerations[promptKey];
+            const videoUrl = generatedVideos[promptKey];
+            
+            // Extract enhanced metadata for video naming
+            const location = typeof prompt === 'object' ? prompt.location : null;
+            const characters = typeof prompt === 'object' ? prompt.characters : null;
+            const mood = typeof prompt === 'object' ? prompt.mood : null;
+            const tone = typeof prompt === 'object' ? prompt.tone : null;
+            const cameraAngle = typeof prompt === 'object' ? prompt.cameraAngle : null;
+            const storyContext = typeof prompt === 'object' ? prompt.storyContext : null;
+            
+            // Create prompt data object for video generation
+            const promptData = typeof prompt === 'object' ? {
+              scene: prompt.scene,
+              sceneName: sceneName,
+              location,
+              characters,
+              mood,
+              tone,
+              cameraAngle
+            } : { sceneName };
+
+            return (
+              <div 
+                key={index} 
+                className="p-4 rounded-lg border border-border bg-muted/30 hover:bg-muted/50 transition-colors"
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1">
+                    <h4 className="font-medium text-foreground mb-1 flex items-center gap-2">
+                      <span className="px-2 py-0.5 rounded bg-purple-500/20 text-purple-400 text-xs">
+                        {index + 1}
+                      </span>
+                      {sceneName}
+                    </h4>
+                    
+                    {/* Enhanced metadata display */}
+                    <div className="flex flex-wrap gap-2 mb-2">
+                      {location && (
+                        <span className="text-xs px-2 py-0.5 rounded bg-blue-500/10 text-blue-400">
+                          📍 {location}
+                        </span>
+                      )}
+                      {characters?.length > 0 && (
+                        <span className="text-xs px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400">
+                          👥 {characters.join(', ')}
+                        </span>
+                      )}
+                      {(mood || tone) && (
+                        <span className="text-xs px-2 py-0.5 rounded bg-amber-500/10 text-amber-400">
+                          🎭 {mood || tone}
+                        </span>
+                      )}
+                      {cameraAngle && (
+                        <span className="text-xs px-2 py-0.5 rounded bg-purple-500/10 text-purple-400">
+                          📷 {cameraAngle}
+                        </span>
+                      )}
+                    </div>
+                    
+                    <p className="text-sm text-muted-foreground">
+                      {promptText}
+                    </p>
+                    
+                    {storyContext && (
+                      <p className="text-xs text-blue-400/80 mt-2 italic">
+                        💡 {storyContext}
+                      </p>
+                    )}
+                  </div>
+                  
+                  <div className="shrink-0">
+                    {videoUrl ? (
+                      <Badge className="bg-emerald-500/20 text-emerald-400 border-0">
+                        <CheckCircle className="w-3 h-3 mr-1" />
+                        Ready
+                      </Badge>
+                    ) : videoStatus?.status === 'processing' || videoStatus?.status === 'starting' ? (
+                      <Badge className="bg-amber-500/20 text-amber-400 border-0">
+                        <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                        Generating...
+                      </Badge>
+                    ) : videoStatus?.status === 'error' ? (
+                      <Badge className="bg-red-500/20 text-red-400 border-0">
+                        <XCircle className="w-3 h-3 mr-1" />
+                        Failed
+                      </Badge>
+                    ) : videoStatus?.status === 'concept' ? (
+                      <Badge className="bg-blue-500/20 text-blue-400 border-0">
+                        Concept Mode
+                      </Badge>
+                    ) : null}
+                  </div>
+                </div>
+
+                {/* Video Player */}
+                {videoUrl && (
+                  <div className="mt-4">
+                    <video 
+                      controls 
+                      className="w-full rounded-lg max-h-64 bg-black"
+                      src={videoUrl}
+                    >
+                      Your browser does not support video playback.
+                    </video>
+                  </div>
+                )}
+
+                {/* Status Message */}
+                {videoStatus && !videoUrl && (
+                  <div className={`mt-3 text-sm ${
+                    videoStatus.status === 'error' ? 'text-red-400' : 
+                    videoStatus.status === 'concept' ? 'text-blue-400' : 
+                    'text-muted-foreground'
+                  }`}>
+                    {videoStatus.message}
+                    {videoStatus.status === 'concept' && (
+                      <div className="mt-2">
+                        <a 
+                          href="https://aistudio.google.com" 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="text-blue-400 hover:underline inline-flex items-center gap-1"
+                        >
+                          Open Google AI Studio <ExternalLink className="w-3 h-3" />
+                        </a>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Action Buttons */}
+                <div className="mt-3 flex items-center gap-2">
+                  {!videoUrl && videoStatus?.status !== 'processing' && videoStatus?.status !== 'starting' && (
+                    <Button
+                      size="sm"
+                      onClick={() => generateVideo(index, promptText, promptData)}
+                      className="bg-purple-600 hover:bg-purple-700 text-white"
+                      disabled={!promptText}
+                    >
+                      <Video className="w-4 h-4 mr-2" />
+                      Visualize This
+                    </Button>
+                  )}
+                  
+                  {videoStatus?.status === 'error' && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => generateVideo(index, promptText, promptData)}
+                      className="text-amber-400 border-amber-400/50 hover:bg-amber-500/10"
+                    >
+                      <RefreshCw className="w-4 h-4 mr-2" />
+                      Retry
+                    </Button>
+                  )}
+
+                  {videoUrl && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => generateVideo(index, promptText, promptData)}
+                      className="text-purple-400 border-purple-400/50 hover:bg-purple-500/10"
+                    >
+                      <RefreshCw className="w-4 h-4 mr-2" />
+                      Regenerate
+                    </Button>
+                  )}
+                  
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => handleCopy(promptText, 'output')}
+                    className="text-muted-foreground hover:text-foreground"
+                  >
+                    <Copy className="w-4 h-4 mr-2" />
+                    Copy Prompt
+                  </Button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
   };
 
   return (
@@ -701,7 +1332,11 @@ export default function AgentDetailModal({ agent, isOpen, onClose, onRunAgent })
                       {getMarkdownOutput() === 'No output generated yet' ? (
                         <p className="text-muted-foreground italic">No output generated yet</p>
                       ) : (
-                        <ReactMarkdown>{getMarkdownOutput()}</ReactMarkdown>
+                        <>
+                          <ReactMarkdown>{getMarkdownOutput()}</ReactMarkdown>
+                          {/* Video Generation Section for Cinematic Teaser */}
+                          {hasVisualPrompts && renderVisualPromptsWithVideo()}
+                        </>
                       )}
                     </div>
                   </div>

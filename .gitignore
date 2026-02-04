@@ -43,3 +43,11 @@ next-env.d.ts
 # temp assets (runtime-generated images)
 /tmp/
 /tmp/**
+
+# generated videos (AI-created video files)
+/public/generated-videos/
+/public/generated-videos/**
+*.mp4
+*.mov
+*.avi
+*.mkv
