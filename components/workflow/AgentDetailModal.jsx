@@ -18,7 +18,7 @@ export default function AgentDetailModal({ agent, isOpen, onClose, onRunAgent })
   const [copiedOutput, setCopiedOutput] = useState(false);
   const [isEditingPrompt, setIsEditingPrompt] = useState(false);
   const [editedPrompt, setEditedPrompt] = useState('');
-  const [viewMode, setViewMode] = useState('markdown'); // 'markdown' or 'json'
+  const [viewMode, setViewMode] = useState('markdown'); // 'markdown', 'json', or 'toon'
   const [videoGenerations, setVideoGenerations] = useState({}); // Track video generation status per prompt
   const [generatedVideos, setGeneratedVideos] = useState({}); // Store completed video URLs
   const [isLoadingVideos, setIsLoadingVideos] = useState(false);
@@ -377,6 +377,40 @@ export default function AgentDetailModal({ agent, isOpen, onClose, onRunAgent })
       setCopiedOutput(true);
       setTimeout(() => setCopiedOutput(false), 2000);
     }
+  };
+
+  // Convert JSON to TOON (Token-Oriented Object Notation)
+  const convertToTOON = (obj, indent = 0) => {
+    if (obj === null) return '⊥';
+    if (obj === undefined) return '∅';
+    
+    const spaces = '  '.repeat(indent);
+    const type = typeof obj;
+    
+    if (type === 'string') return `"${obj}"`;
+    if (type === 'number') return `${obj}`;
+    if (type === 'boolean') return obj ? '⊤' : '⊥';
+    
+    if (Array.isArray(obj)) {
+      if (obj.length === 0) return '[]';
+      const items = obj.map((item, idx) => 
+        `${spaces}  [${idx}] → ${convertToTOON(item, indent + 1)}`
+      ).join('\n');
+      return `[\n${items}\n${spaces}]`;
+    }
+    
+    if (type === 'object') {
+      const keys = Object.keys(obj);
+      if (keys.length === 0) return '{}';
+      const items = keys.map(key => {
+        const value = obj[key];
+        const valueStr = convertToTOON(value, indent + 1);
+        return `${spaces}  ${key} ⟹ ${valueStr}`;
+      }).join('\n');
+      return `{\n${items}\n${spaces}}`;
+    }
+    
+    return String(obj);
   };
 
   const getStatusInfo = () => {
@@ -1385,12 +1419,25 @@ export default function AgentDetailModal({ agent, isOpen, onClose, onRunAgent })
                         <Code className="w-3 h-3 mr-1" />
                         JSON
                       </Button>
+                      <Button
+                        variant={viewMode === 'toon' ? 'default' : 'ghost'}
+                        size="sm"
+                        onClick={() => setViewMode('toon')}
+                        className={`text-xs h-7 px-2 ${viewMode === 'toon' ? 'bg-emerald-500 text-white hover:bg-emerald-600' : ''}`}
+                      >
+                        <Network className="w-3 h-3 mr-1" />
+                        TOON
+                      </Button>
                     </div>
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={() => handleCopy(
-                        agent.data.result ? JSON.stringify(agent.data.result, null, 2) : 'No result',
+                        agent.data.result 
+                          ? viewMode === 'toon' 
+                            ? convertToTOON(agent.data.result)
+                            : JSON.stringify(agent.data.result, null, 2) 
+                          : 'No result',
                         'output'
                       )}
                       className="text-xs"
@@ -1419,6 +1466,12 @@ export default function AgentDetailModal({ agent, isOpen, onClose, onRunAgent })
                           <ReactMarkdown>{getMarkdownOutput()}</ReactMarkdown>
                         )}
                       </div>
+                    ) : viewMode === 'toon' ? (
+                      <pre className="p-4 text-xs text-muted-foreground font-mono whitespace-pre-wrap break-words leading-relaxed">
+                        {agent.data.result
+                          ? convertToTOON(agent.data.result)
+                          : 'No structured result available yet. Run the agent to generate output.'}
+                      </pre>
                     ) : (
                       <pre className="p-4 text-xs text-muted-foreground font-mono whitespace-pre-wrap break-words">
                         {agent.data.result
