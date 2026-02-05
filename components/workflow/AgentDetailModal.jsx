@@ -38,7 +38,7 @@ export default function AgentDetailModal({ agent, isOpen, onClose, onRunAgent })
   // Load video data from node data AND database
   const loadVideoData = useCallback(async () => {
     const info = getWorkflowInfo();
-    
+
     // First, check if videos are stored directly in the node data
     // This is the fastest path - no API call needed
     if (agent?.data?.generatedVideos && Object.keys(agent.data.generatedVideos).length > 0) {
@@ -54,7 +54,7 @@ export default function AgentDetailModal({ agent, isOpen, onClose, onRunAgent })
       });
       setVideoGenerations(prev => ({ ...prev, ...statuses }));
     }
-    
+
     // Also check the result's visualPrompts for any stored video URLs
     if (agent?.data?.result?.visualPrompts) {
       const resultVideos = {};
@@ -71,29 +71,29 @@ export default function AgentDetailModal({ agent, isOpen, onClose, onRunAgent })
         }));
       }
     }
-    
+
     // Then also fetch from database for any additional videos
     if (!info?.workflowId) {
       console.log('No workflowId available, skipping database video load');
       return;
     }
-    
+
     setIsLoadingVideos(true);
-    
+
     try {
       console.log('Loading videos from database for:', info);
-      
+
       const response = await fetch(
         `/api/scriptforge/generated-videos?workflowId=${encodeURIComponent(info.workflowId)}&agentType=${encodeURIComponent(info.agentType)}`
       );
-      
+
       if (!response.ok) {
         throw new Error('Failed to fetch videos');
       }
-      
+
       const data = await response.json();
       console.log('Loaded videos from DB:', data);
-      
+
       if (data.success && data.videos?.[info.agentType]) {
         const agentVideos = data.videos[info.agentType];
         // Merge with any already loaded videos (node data takes precedence)
@@ -121,32 +121,6 @@ export default function AgentDetailModal({ agent, isOpen, onClose, onRunAgent })
     }
   }, [agent, isOpen, loadVideoData]);
 
-  // Reload data when user returns to browser tab (focus event)
-  useEffect(() => {
-    if (!isOpen) return;
-
-    const handleWindowFocus = () => {
-      console.log('Window focused - reloading video data...');
-      loadVideoData();
-    };
-
-    const handleVisibilityChange = () => {
-      if (!document.hidden) {
-        console.log('Tab became visible - reloading video data...');
-        loadVideoData();
-      }
-    };
-
-    // Listen for both focus and visibility change events
-    window.addEventListener('focus', handleWindowFocus);
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-
-    return () => {
-      window.removeEventListener('focus', handleWindowFocus);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-  }, [isOpen, loadVideoData]);
-
   // Verify that saved video URLs still exist
   const verifyVideoExists = useCallback(async (videoUrl) => {
     try {
@@ -160,7 +134,7 @@ export default function AgentDetailModal({ agent, isOpen, onClose, onRunAgent })
   // Clean up stale video data
   const cleanupStaleData = useCallback(async () => {
     const videoEntries = Object.entries(generatedVideos);
-    if (videoEntries.length === 0) return;    const validVideos = {};
+    if (videoEntries.length === 0) return; const validVideos = {};
     const validGenerations = { ...videoGenerations };
 
     for (const [key, videoUrl] of videoEntries) {
@@ -188,7 +162,7 @@ export default function AgentDetailModal({ agent, isOpen, onClose, onRunAgent })
       const timer = setTimeout(() => {
         cleanupStaleData();
       }, 1000);
-      
+
       return () => clearTimeout(timer);
     }
   }, [isOpen, generatedVideos, cleanupStaleData]);
@@ -220,7 +194,7 @@ export default function AgentDetailModal({ agent, isOpen, onClose, onRunAgent })
   const generateVideo = useCallback(async (promptIndex, promptText, promptData = {}) => {
     const promptKey = `prompt_${promptIndex}`;
     const info = getWorkflowInfo();
-    
+
     // Set loading state
     updateVideoGenerations(prev => ({
       ...prev,
@@ -265,8 +239,8 @@ export default function AgentDetailModal({ agent, isOpen, onClose, onRunAgent })
         // API unavailable - show concept mode
         updateVideoGenerations(prev => ({
           ...prev,
-          [promptKey]: { 
-            status: 'concept', 
+          [promptKey]: {
+            status: 'concept',
             message: data.message || data.error || 'Video generation unavailable. Use the prompt in Google AI Studio.',
             concept: data.concept,
             fallbackUrl: data.fallbackUrl
@@ -280,8 +254,8 @@ export default function AgentDetailModal({ agent, isOpen, onClose, onRunAgent })
       if (!operationId) {
         updateVideoGenerations(prev => ({
           ...prev,
-          [promptKey]: { 
-            status: 'concept', 
+          [promptKey]: {
+            status: 'concept',
             message: 'Video generation started but no operation ID returned. Try again.',
           }
         }));
@@ -309,7 +283,7 @@ export default function AgentDetailModal({ agent, isOpen, onClose, onRunAgent })
   const pollVideoStatus = useCallback(async (promptKey, operationId) => {
     let attempts = 0;
     const maxAttempts = 60; // 5 minutes max (5s intervals)
-    
+
     const poll = async () => {
       if (attempts >= maxAttempts) {
         updateVideoGenerations(prev => ({
@@ -364,13 +338,13 @@ export default function AgentDetailModal({ agent, isOpen, onClose, onRunAgent })
         attempts++;
         updateVideoGenerations(prev => ({
           ...prev,
-          [promptKey]: { 
-            status: 'processing', 
+          [promptKey]: {
+            status: 'processing',
             message: `Generating video... (${attempts * 5}s elapsed)`,
-            operationId 
+            operationId
           }
         }));
-        
+
         setTimeout(poll, 5000); // Poll every 5 seconds
       } catch (error) {
         console.error('Poll error:', error);
@@ -388,7 +362,7 @@ export default function AgentDetailModal({ agent, isOpen, onClose, onRunAgent })
   const isStoryIntelligenceAgent = agent.data?.agentType === 'story-intelligence' || agent.data?.type === 'story-intelligence';
 
   const handleOpenKnowledgeGraph = () => {
-    const url = agent.data?.workflowId 
+    const url = agent.data?.workflowId
       ? `/story-graph?workflowId=${agent.data.workflowId}`
       : '/story-graph';
     router.push(url);
@@ -440,10 +414,10 @@ export default function AgentDetailModal({ agent, isOpen, onClose, onRunAgent })
   };
 
   const statusInfo = getStatusInfo();
-  const inputText = agent.data.input 
+  const inputText = agent.data.input
     ? (typeof agent.data.input === 'object' ? JSON.stringify(agent.data.input, null, 2) : String(agent.data.input))
     : 'No input available yet';
-  
+
   // Debug log
   console.log('AgentDetailModal agent data:', {
     status: agent.data.status,
@@ -452,7 +426,7 @@ export default function AgentDetailModal({ agent, isOpen, onClose, onRunAgent })
     result: agent.data.result,
     output: agent.data.output
   });
-  
+
   // Get JSON output
   const getJsonOutput = () => {
     const result = agent.data.result;
@@ -464,26 +438,26 @@ export default function AgentDetailModal({ agent, isOpen, onClose, onRunAgent })
   const getMarkdownOutput = () => {
     const result = agent.data.result;
     const output = agent.data.output;
-    
+
     if (!result && !output) return 'No output generated yet';
-    
+
     // Always prefer formatting the full result object if available
     if (result && typeof result === 'object') {
       return formatResultAsMarkdown(result);
     }
-    
+
     // If there's a string output, use it
     if (typeof output === 'string') {
       return output;
     }
-    
+
     return String(output || result);
   };
 
   // Convert JSON result to readable Markdown
   const formatResultAsMarkdown = (result) => {
     let markdown = '';
-    
+
     // Handle if result is an array (e.g., intelligent-recall returns array of Q&A)
     if (Array.isArray(result)) {
       markdown += '## 📋 Results\n\n';
@@ -505,7 +479,7 @@ export default function AgentDetailModal({ agent, isOpen, onClose, onRunAgent })
       });
       return markdown;
     }
-    
+
     // Handle scene suggestions
     if (result.sceneSuggestions?.length) {
       markdown += '## 🎬 Scene Suggestions\n\n';
@@ -522,7 +496,7 @@ export default function AgentDetailModal({ agent, isOpen, onClose, onRunAgent })
         }
       });
     }
-    
+
     // Handle plot developments
     if (result.plotDevelopments?.length) {
       markdown += '## 📖 Plot Developments\n\n';
@@ -537,7 +511,7 @@ export default function AgentDetailModal({ agent, isOpen, onClose, onRunAgent })
         }
       });
     }
-    
+
     // Handle dialogue improvements
     if (result.dialogueImprovements?.length) {
       markdown += '## 💬 Dialogue Improvements\n\n';
@@ -554,7 +528,7 @@ export default function AgentDetailModal({ agent, isOpen, onClose, onRunAgent })
         }
       });
     }
-    
+
     // Handle character arc guidance
     if (result.characterArcGuidance?.length) {
       markdown += '## 👤 Character Arc Guidance\n\n';
@@ -570,7 +544,7 @@ export default function AgentDetailModal({ agent, isOpen, onClose, onRunAgent })
         }
       });
     }
-    
+
     // Handle theme reinforcement (both singular and plural keys)
     const themeData = result.themeReinforcements || result.themeReinforcement;
     if (themeData?.length) {
@@ -585,7 +559,7 @@ export default function AgentDetailModal({ agent, isOpen, onClose, onRunAgent })
         }
       });
     }
-    
+
     // Handle alternative scenarios
     if (result.alternativeScenarios?.length) {
       markdown += '## 🔀 Alternative Scenarios\n\n';
@@ -599,7 +573,7 @@ export default function AgentDetailModal({ agent, isOpen, onClose, onRunAgent })
         }
       });
     }
-    
+
     // Handle story intelligence results
     if (result.genre || result.narrativeStructure || result.writingStyle) {
       markdown += `## 📚 Story Analysis\n\n`;
@@ -608,7 +582,7 @@ export default function AgentDetailModal({ agent, isOpen, onClose, onRunAgent })
       if (result.setting) markdown += `**Setting:** ${result.setting}\n\n`;
       if (result.timePeriod) markdown += `**Time Period:** ${result.timePeriod}\n\n`;
       if (result.mainConflict) markdown += `**Main Conflict:** ${result.mainConflict}\n\n`;
-      
+
       if (result.tone) {
         markdown += `### 🎵 Tone\n`;
         if (typeof result.tone === 'object') {
@@ -620,7 +594,7 @@ export default function AgentDetailModal({ agent, isOpen, onClose, onRunAgent })
         }
         markdown += '\n';
       }
-      
+
       if (result.narrativeStructure) {
         markdown += `### 📐 Narrative Structure\n`;
         if (typeof result.narrativeStructure === 'object') {
@@ -632,7 +606,7 @@ export default function AgentDetailModal({ agent, isOpen, onClose, onRunAgent })
         }
         markdown += '\n';
       }
-      
+
       if (result.writingStyle) {
         markdown += `### ✍️ Writing Style\n`;
         if (typeof result.writingStyle === 'object') {
@@ -645,7 +619,7 @@ export default function AgentDetailModal({ agent, isOpen, onClose, onRunAgent })
         markdown += '\n';
       }
     }
-    
+
     // Handle knowledge graph results
     if (result.characters?.length) {
       markdown += `## 👥 Characters (${result.characters.length})\n\n`;
@@ -653,48 +627,48 @@ export default function AgentDetailModal({ agent, isOpen, onClose, onRunAgent })
         if (typeof char === 'string') {
           markdown += `- ${char}\n`;
         } else {
-          markdown += `- **${char.name || `Character ${i+1}`}** - ${char.role || char.description || 'Unknown role'}\n`;
+          markdown += `- **${char.name || `Character ${i + 1}`}** - ${char.role || char.description || 'Unknown role'}\n`;
         }
       });
       markdown += '\n';
     }
-    
+
     if (result.locations?.length) {
       markdown += `## 📍 Locations (${result.locations.length})\n\n`;
       result.locations.forEach((loc, i) => {
         if (typeof loc === 'string') {
           markdown += `- ${loc}\n`;
         } else {
-          markdown += `- **${loc.name || `Location ${i+1}`}** - ${loc.type || loc.description || 'Location'}\n`;
+          markdown += `- **${loc.name || `Location ${i + 1}`}** - ${loc.type || loc.description || 'Location'}\n`;
         }
       });
       markdown += '\n';
     }
-    
+
     if (result.objects?.length) {
       markdown += `## 🎁 Objects & Props (${result.objects.length})\n\n`;
       result.objects.forEach((obj, i) => {
         if (typeof obj === 'string') {
           markdown += `- ${obj}\n`;
         } else {
-          markdown += `- **${obj.name || `Object ${i+1}`}** - ${obj.significance || obj.description || ''}\n`;
+          markdown += `- **${obj.name || `Object ${i + 1}`}** - ${obj.significance || obj.description || ''}\n`;
         }
       });
       markdown += '\n';
     }
-    
+
     if (result.events?.length) {
       markdown += `## 📅 Events (${result.events.length})\n\n`;
       result.events.forEach((event, i) => {
         if (typeof event === 'string') {
           markdown += `${i + 1}. ${event}\n`;
         } else {
-          markdown += `${i + 1}. **${event.name || event.title || `Event ${i+1}`}** - ${event.description || ''}\n`;
+          markdown += `${i + 1}. **${event.name || event.title || `Event ${i + 1}`}** - ${event.description || ''}\n`;
         }
       });
       markdown += '\n';
     }
-    
+
     if (result.relationships?.length) {
       markdown += `## 🔗 Relationships (${result.relationships.length})\n\n`;
       result.relationships.forEach((rel, i) => {
@@ -706,25 +680,25 @@ export default function AgentDetailModal({ agent, isOpen, onClose, onRunAgent })
       });
       markdown += '\n';
     }
-    
+
     if (result.plotThreads?.length) {
       markdown += `## 🧵 Plot Threads (${result.plotThreads.length})\n\n`;
       result.plotThreads.forEach((thread, i) => {
         if (typeof thread === 'string') {
           markdown += `- ${thread}\n`;
         } else {
-          markdown += `- **${thread.name || thread.title || `Thread ${i+1}`}**: ${thread.description || thread.status || ''}\n`;
+          markdown += `- **${thread.name || thread.title || `Thread ${i + 1}`}**: ${thread.description || thread.status || ''}\n`;
         }
       });
       markdown += '\n';
     }
-    
+
     // Handle continuity/validator results
     if (result.continuityScore !== undefined) {
       markdown += `## ✅ Continuity Report\n\n`;
       markdown += `**Score:** ${result.continuityScore}/100\n\n`;
     }
-    
+
     if (result.contradictions?.length) {
       markdown += `### ⚠️ Contradictions (${result.contradictions.length})\n\n`;
       result.contradictions.forEach((c, i) => {
@@ -736,7 +710,7 @@ export default function AgentDetailModal({ agent, isOpen, onClose, onRunAgent })
       });
       markdown += '\n';
     }
-    
+
     if (result.errors?.length) {
       markdown += `### ❌ Errors (${result.errors.length})\n\n`;
       result.errors.forEach((e, i) => {
@@ -748,7 +722,7 @@ export default function AgentDetailModal({ agent, isOpen, onClose, onRunAgent })
       });
       markdown += '\n';
     }
-    
+
     if (result.warnings?.length) {
       markdown += `### ⚠️ Warnings (${result.warnings.length})\n\n`;
       result.warnings.forEach((w, i) => {
@@ -760,7 +734,7 @@ export default function AgentDetailModal({ agent, isOpen, onClose, onRunAgent })
       });
       markdown += '\n';
     }
-    
+
     if (result.recommendations?.length) {
       markdown += `### 💡 Recommendations\n\n`;
       result.recommendations.forEach((rec, i) => {
@@ -772,7 +746,7 @@ export default function AgentDetailModal({ agent, isOpen, onClose, onRunAgent })
       });
       markdown += '\n';
     }
-    
+
     // Handle parse error fallback
     if (result._parseError) {
       markdown += `## ⚠️ Parse Error\n\n`;
@@ -782,7 +756,7 @@ export default function AgentDetailModal({ agent, isOpen, onClose, onRunAgent })
       }
       markdown += `**Tip:** Try running the agent again for better results.\n\n`;
     }
-    
+
     // Handle temporal/timeline results
     if (result.chronologicalEvents?.length) {
       markdown += `## ⏰ Timeline (${result.chronologicalEvents.length} events)\n\n`;
@@ -790,7 +764,7 @@ export default function AgentDetailModal({ agent, isOpen, onClose, onRunAgent })
         if (typeof event === 'string') {
           markdown += `${i + 1}. ${event}\n`;
         } else {
-          markdown += `### ${event.timestamp || event.time || `Event ${i+1}`}\n`;
+          markdown += `### ${event.timestamp || event.time || `Event ${i + 1}`}\n`;
           markdown += `**${event.name || event.title || 'Event'}**\n\n`;
           if (event.description) markdown += `${event.description}\n\n`;
           if (event.participants?.length) markdown += `**Participants:** ${event.participants.join(', ')}\n\n`;
@@ -800,7 +774,7 @@ export default function AgentDetailModal({ agent, isOpen, onClose, onRunAgent })
         }
       });
     }
-    
+
     // Handle flashbacks
     if (result.flashbacks?.length) {
       markdown += `## ⏪ Flashbacks (${result.flashbacks.length})\n\n`;
@@ -816,7 +790,7 @@ export default function AgentDetailModal({ agent, isOpen, onClose, onRunAgent })
         }
       });
     }
-    
+
     // Handle flash-forwards
     if (result.flashForwards?.length) {
       markdown += `## ⏩ Flash-Forwards (${result.flashForwards.length})\n\n`;
@@ -832,7 +806,7 @@ export default function AgentDetailModal({ agent, isOpen, onClose, onRunAgent })
         }
       });
     }
-    
+
     // Handle causal chains
     if (result.causalChains?.length) {
       markdown += `## 🔗 Cause & Effect Chains (${result.causalChains.length})\n\n`;
@@ -848,7 +822,7 @@ export default function AgentDetailModal({ agent, isOpen, onClose, onRunAgent })
         }
       });
     }
-    
+
     // Handle temporal issues
     if (result.temporalIssues?.length) {
       markdown += `## ⚠️ Temporal Issues (${result.temporalIssues.length})\n\n`;
@@ -865,7 +839,7 @@ export default function AgentDetailModal({ agent, isOpen, onClose, onRunAgent })
         }
       });
     }
-    
+
     // Handle story duration and narrative pace
     if (result.storyDuration) {
       markdown += `**📅 Story Duration:** ${result.storyDuration}\n\n`;
@@ -873,11 +847,11 @@ export default function AgentDetailModal({ agent, isOpen, onClose, onRunAgent })
     if (result.narrativePace) {
       markdown += `**🏃 Narrative Pace:** ${result.narrativePace}\n\n`;
     }
-    
+
     // Handle cinematic teaser results
     if (result.trailerScript || result.visualPrompts || result.teaserText || result.essence) {
       markdown += `## 🎬 Cinematic Teaser\n\n`;
-      
+
       // Story Essence
       if (result.essence) {
         markdown += `### 🎯 Story Essence\n\n`;
@@ -900,9 +874,9 @@ export default function AgentDetailModal({ agent, isOpen, onClose, onRunAgent })
           markdown += '\n';
         }
       }
-      
+
       if (result.teaserText) markdown += `${result.teaserText}\n\n`;
-      
+
       // Teaser Script
       if (result.teaserScript) {
         markdown += `### 🎥 Trailer Script\n\n`;
@@ -931,7 +905,7 @@ export default function AgentDetailModal({ agent, isOpen, onClose, onRunAgent })
           if (result.teaserScript.pacing) markdown += `**Pacing:** ${result.teaserScript.pacing}\n\n`;
         }
       }
-      
+
       // Visual Prompts - Enhanced display
       if (result.visualPrompts?.length) {
         markdown += `### 🖼️ Visual Prompts (click to preview atmosphere & emotion)\n\n`;
@@ -939,7 +913,7 @@ export default function AgentDetailModal({ agent, isOpen, onClose, onRunAgent })
           if (typeof prompt === 'string') {
             markdown += `**${i + 1}.** ${prompt}\n\n`;
           } else {
-            markdown += `**${i + 1}. ${prompt.scene || `Scene ${i+1}`}**\n`;
+            markdown += `**${i + 1}. ${prompt.scene || `Scene ${i + 1}`}**\n`;
             if (prompt.location) markdown += `📍 *${prompt.location}*\n`;
             if (prompt.characters?.length) markdown += `👥 *Characters: ${prompt.characters.join(', ')}*\n`;
             if (prompt.mood || prompt.tone) {
@@ -953,7 +927,7 @@ export default function AgentDetailModal({ agent, isOpen, onClose, onRunAgent })
         });
         markdown += `*🎬 Use "Visualize This" buttons below to quickly see the atmosphere and emotional tone.*\n\n`;
       }
-      
+
       // Hooks
       if (result.hooks?.length) {
         markdown += `### 🪝 Hook Lines\n\n`;
@@ -962,10 +936,10 @@ export default function AgentDetailModal({ agent, isOpen, onClose, onRunAgent })
         });
         markdown += '\n';
       }
-      
+
       // Tagline
       if (result.tagline) markdown += `### ⭐ Tagline\n\n> **"${result.tagline}"**\n\n`;
-      
+
       // Creative Suggestions
       if (result.creativeSuggestions) {
         markdown += `### 💡 Creative Suggestions\n\n`;
@@ -987,11 +961,11 @@ export default function AgentDetailModal({ agent, isOpen, onClose, onRunAgent })
           markdown += '\n';
         }
       }
-      
+
       if (result.hookLine && !result.hooks) markdown += `**Hook:** *"${result.hookLine}"*\n\n`;
       if (result.mood && !result.essence?.mood) markdown += `**Mood:** ${result.mood}\n\n`;
     }
-    
+
     // If nothing specific matched, show a generic but nice summary
     if (!markdown) {
       const keys = Object.keys(result);
@@ -999,7 +973,7 @@ export default function AgentDetailModal({ agent, isOpen, onClose, onRunAgent })
       keys.forEach(key => {
         const value = result[key];
         const formattedKey = key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
-        
+
         if (Array.isArray(value)) {
           if (value.length === 0) {
             markdown += `**${formattedKey}:** None\n\n`;
@@ -1023,7 +997,7 @@ export default function AgentDetailModal({ agent, isOpen, onClose, onRunAgent })
         }
       });
     }
-    
+
     return markdown;
   };
 
@@ -1069,7 +1043,7 @@ export default function AgentDetailModal({ agent, isOpen, onClose, onRunAgent })
         <p className="text-sm text-muted-foreground mb-4">
           Generate quick visual previews to help you <span className="text-purple-400 font-medium">see the atmosphere, feel the emotion, and visualize relationships</span> in your scenes.
         </p>
-        
+
         <div className="space-y-4">
           {result.visualPrompts.map((prompt, index) => {
             const promptKey = `prompt_${index}`;
@@ -1077,7 +1051,7 @@ export default function AgentDetailModal({ agent, isOpen, onClose, onRunAgent })
             const sceneName = typeof prompt === 'object' ? (prompt.scene || `Scene ${index + 1}`) : `Prompt ${index + 1}`;
             const videoStatus = videoGenerations[promptKey];
             const videoUrl = generatedVideos[promptKey];
-            
+
             // Extract enhanced metadata for video naming
             const location = typeof prompt === 'object' ? prompt.location : null;
             const characters = typeof prompt === 'object' ? prompt.characters : null;
@@ -1085,7 +1059,7 @@ export default function AgentDetailModal({ agent, isOpen, onClose, onRunAgent })
             const tone = typeof prompt === 'object' ? prompt.tone : null;
             const cameraAngle = typeof prompt === 'object' ? prompt.cameraAngle : null;
             const storyContext = typeof prompt === 'object' ? prompt.storyContext : null;
-            
+
             // Create prompt data object for video generation
             const promptData = typeof prompt === 'object' ? {
               scene: prompt.scene,
@@ -1098,8 +1072,8 @@ export default function AgentDetailModal({ agent, isOpen, onClose, onRunAgent })
             } : { sceneName };
 
             return (
-              <div 
-                key={index} 
+              <div
+                key={index}
                 className="p-4 rounded-lg border border-border bg-muted/30 hover:bg-muted/50 transition-colors"
               >
                 <div className="flex items-start justify-between gap-4">
@@ -1110,7 +1084,7 @@ export default function AgentDetailModal({ agent, isOpen, onClose, onRunAgent })
                       </span>
                       {sceneName}
                     </h4>
-                    
+
                     {/* Enhanced metadata display */}
                     <div className="flex flex-wrap gap-2 mb-2">
                       {location && (
@@ -1134,18 +1108,18 @@ export default function AgentDetailModal({ agent, isOpen, onClose, onRunAgent })
                         </span>
                       )}
                     </div>
-                    
+
                     <p className="text-sm text-muted-foreground">
                       {promptText}
                     </p>
-                    
+
                     {storyContext && (
                       <p className="text-xs text-blue-400/80 mt-2 italic">
                         💡 {storyContext}
                       </p>
                     )}
                   </div>
-                  
+
                   <div className="shrink-0">
                     {videoUrl ? (
                       <Badge className="bg-emerald-500/20 text-emerald-400 border-0">
@@ -1173,8 +1147,8 @@ export default function AgentDetailModal({ agent, isOpen, onClose, onRunAgent })
                 {/* Video Player */}
                 {videoUrl && (
                   <div className="mt-4">
-                    <video 
-                      controls 
+                    <video
+                      controls
                       className="w-full rounded-lg max-h-64 bg-black"
                       src={videoUrl}
                     >
@@ -1185,17 +1159,16 @@ export default function AgentDetailModal({ agent, isOpen, onClose, onRunAgent })
 
                 {/* Status Message */}
                 {videoStatus && !videoUrl && (
-                  <div className={`mt-3 text-sm ${
-                    videoStatus.status === 'error' ? 'text-red-400' : 
-                    videoStatus.status === 'concept' ? 'text-blue-400' : 
-                    'text-muted-foreground'
-                  }`}>
+                  <div className={`mt-3 text-sm ${videoStatus.status === 'error' ? 'text-red-400' :
+                      videoStatus.status === 'concept' ? 'text-blue-400' :
+                        'text-muted-foreground'
+                    }`}>
                     {videoStatus.message}
                     {videoStatus.status === 'concept' && (
                       <div className="mt-2">
-                        <a 
-                          href="https://aistudio.google.com" 
-                          target="_blank" 
+                        <a
+                          href="https://aistudio.google.com"
+                          target="_blank"
                           rel="noopener noreferrer"
                           className="text-blue-400 hover:underline inline-flex items-center gap-1"
                         >
@@ -1219,7 +1192,7 @@ export default function AgentDetailModal({ agent, isOpen, onClose, onRunAgent })
                       Visualize This
                     </Button>
                   )}
-                  
+
                   {videoStatus?.status === 'error' && (
                     <Button
                       size="sm"
@@ -1243,7 +1216,7 @@ export default function AgentDetailModal({ agent, isOpen, onClose, onRunAgent })
                       Regenerate
                     </Button>
                   )}
-                  
+
                   <Button
                     size="sm"
                     variant="ghost"
@@ -1268,9 +1241,9 @@ export default function AgentDetailModal({ agent, isOpen, onClose, onRunAgent })
         <DialogHeader className="shrink-0">
           <div className="flex items-start justify-between">
             <div className="flex items-start gap-4">
-              <div 
+              <div
                 className="p-3 rounded-xl shrink-0 border border-border"
-                style={{ 
+                style={{
                   backgroundColor: `${agent.data.color}15`,
                 }}
               >
@@ -1296,7 +1269,7 @@ export default function AgentDetailModal({ agent, isOpen, onClose, onRunAgent })
                 </div>
               </div>
             </div>
-            
+
             {(agent.data.status !== 'running') ? (
               <div className="flex flex-col gap-2">
                 {isKnowledgeGraphAgent && (
@@ -1417,7 +1390,7 @@ export default function AgentDetailModal({ agent, isOpen, onClose, onRunAgent })
                       variant="outline"
                       size="sm"
                       onClick={() => handleCopy(
-                        agent.data.result ? JSON.stringify(agent.data.result, null, 2) : 'No result', 
+                        agent.data.result ? JSON.stringify(agent.data.result, null, 2) : 'No result',
                         'output'
                       )}
                       className="text-xs"
@@ -1448,7 +1421,7 @@ export default function AgentDetailModal({ agent, isOpen, onClose, onRunAgent })
                       </div>
                     ) : (
                       <pre className="p-4 text-xs text-muted-foreground font-mono whitespace-pre-wrap break-words">
-                        {agent.data.result 
+                        {agent.data.result
                           ? JSON.stringify(agent.data.result, null, 2)
                           : 'No structured result available yet. Run the agent to generate output.'}
                       </pre>

@@ -19,7 +19,7 @@ export default function WorkflowDetailPage() {
       // Use dedicated endpoint for single workflow fetch (more efficient)
       const response = await fetch(`/api/scriptforge/workflows/save?id=${params.id}`);
       const data = await response.json();
-      
+
       if (data.success && data.workflow) {
         // Detailed logging to verify DB data
         console.log('Loaded workflow from DB:', {
@@ -37,7 +37,7 @@ export default function WorkflowDetailPage() {
         console.log('Workflow not found via save endpoint, trying list...');
         const listResponse = await fetch(`/api/scriptforge/workflows/list`);
         const listData = await listResponse.json();
-        
+
         if (listData.success) {
           const found = listData.workflows.find(w => w._id === params.id);
           if (found) {
@@ -61,32 +61,6 @@ export default function WorkflowDetailPage() {
     if (params.id) {
       fetchWorkflow();
     }
-  }, [params.id, fetchWorkflow]);
-
-  // Refetch when page becomes visible (e.g., navigating back from story-graph)
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible' && params.id) {
-        console.log('Page visible, refreshing workflow data...');
-        fetchWorkflow();
-      }
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [params.id, fetchWorkflow]);
-
-  // Also refetch on window focus (handles browser tab switches)
-  useEffect(() => {
-    const handleFocus = () => {
-      if (params.id) {
-        console.log('Window focused, refreshing workflow data...');
-        fetchWorkflow();
-      }
-    };
-
-    window.addEventListener('focus', handleFocus);
-    return () => window.removeEventListener('focus', handleFocus);
   }, [params.id, fetchWorkflow]);
 
   const handleSave = async (nodes, edges) => {
