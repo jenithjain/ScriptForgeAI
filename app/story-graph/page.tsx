@@ -35,8 +35,9 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
-// Dynamic import for ForceGraph3D (no SSR)
+// Dynamic imports for ForceGraph (no SSR)
 const ForceGraph3D = dynamic(() => import('react-force-graph-3d'), { ssr: false });
+const ForceGraph2D = dynamic(() => import('react-force-graph-2d'), { ssr: false });
 
 // Node type colors and icons
 const NODE_TYPES = {
@@ -79,6 +80,8 @@ export default function StoryKnowledgeGraphPage() {
   const workflowId = searchParams.get('workflowId');
   
   const fgRef = useRef<any>(null);
+  const fg2DRef = useRef<any>(null);
+  const [viewMode, setViewMode] = useState<'3d' | '2d'>('3d');
   const [graphData, setGraphData] = useState<GraphData>({ nodes: [], edges: [] });
   const [loading, setLoading] = useState(true);
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
@@ -231,18 +234,26 @@ export default function StoryKnowledgeGraphPage() {
   // Node click handler
   const handleNodeClick = useCallback((node: GraphNode) => {
     setSelectedNode(node);
-    
-    // Focus camera on node
-    if (fgRef.current) {
-      const distance = 150;
-      const distRatio = 1 + distance / Math.hypot(node.x || 0, node.y || 0, node.z || 0);
-      fgRef.current.cameraPosition(
-        { x: (node.x || 0) * distRatio, y: (node.y || 0) * distRatio, z: (node.z || 0) * distRatio },
-        node,
-        2000
-      );
+
+    if (viewMode === '3d') {
+      // Focus camera on node in 3D
+      if (fgRef.current) {
+        const distance = 150;
+        const distRatio = 1 + distance / Math.hypot(node.x || 0, node.y || 0, node.z || 0);
+        fgRef.current.cameraPosition(
+          { x: (node.x || 0) * distRatio, y: (node.y || 0) * distRatio, z: (node.z || 0) * distRatio },
+          node,
+          2000
+        );
+      }
+    } else {
+      // Center on node in 2D
+      if (fg2DRef.current) {
+        fg2DRef.current.centerAt(node.x, node.y, 1000);
+        fg2DRef.current.zoom(4, 1000);
+      }
     }
-  }, []);
+  }, [viewMode]);
 
   // Clear graph data (for current workflow if workflowId is set)
   const clearGraphData = useCallback(async () => {
@@ -276,6 +287,15 @@ export default function StoryKnowledgeGraphPage() {
       toast.error('Failed to clear graph data');
     }
   }, [workflowId]);
+
+  // Configure 2D graph forces for proper node spreading
+  useEffect(() => {
+    if (viewMode === '2d' && fg2DRef.current) {
+      fg2DRef.current.d3Force('charge')?.strength(-800);
+      fg2DRef.current.d3Force('link')?.distance(150);
+      fg2DRef.current.d3Force('center')?.strength(0.05);
+    }
+  }, [viewMode, filteredData]);
 
   // Custom node rendering
   const getNodeColor = useCallback((node: GraphNode) => {
@@ -323,6 +343,30 @@ export default function StoryKnowledgeGraphPage() {
           </div>
 
           <div className="flex items-center gap-2">
+            {/* 2D/3D Toggle */}
+            <div className="flex items-center bg-muted rounded-lg p-1">
+              <button
+                onClick={() => setViewMode('2d')}
+                className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
+                  viewMode === '2d'
+                    ? 'bg-emerald-500 text-white shadow-sm shadow-emerald-500/30'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                2D
+              </button>
+              <button
+                onClick={() => setViewMode('3d')}
+                className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
+                  viewMode === '3d'
+                    ? 'bg-purple-500 text-white shadow-sm shadow-purple-500/30'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                3D
+              </button>
+            </div>
+            <Separator orientation="vertical" className="h-6 bg-border" />
             <Button
               variant="default"
               size="default"
@@ -532,7 +576,7 @@ export default function StoryKnowledgeGraphPage() {
                 </Button>
               </div>
             </div>
-          ) : (
+          ) : viewMode === '3d' ? (
             <ForceGraph3D
               ref={fgRef}
               graphData={filteredData}
@@ -565,31 +609,85 @@ export default function StoryKnowledgeGraphPage() {
               enableNavigationControls={true}
               controlType="orbit"
             />
+          ) : (
+            <ForceGraph2D
+              ref={fg2DRef}
+              graphData={filteredData}
+              nodeLabel={(node: any) => `${node.label || node.name} (${node.type})`}
+              nodeColor={getNodeColor}
+              nodeVal={(node: any) => node.type === 'Chapter' ? 20 : node.type === 'Character' ? 15 : 10}
+              nodeCanvasObject={(node: any, ctx: CanvasRenderingContext2D, globalScale: number) => {
+                const label = node.label || node.name;
+                const fontSize = 12 / globalScale;
+                const nodeR = Math.sqrt(node.type === 'Chapter' ? 20 : node.type === 'Character' ? 15 : 10) * 2;
+                const color = getNodeColor(node);
+
+                // Draw node circle
+                ctx.beginPath();
+                ctx.arc(node.x, node.y, nodeR, 0, 2 * Math.PI, false);
+                ctx.fillStyle = color;
+                ctx.fill();
+
+                // Draw border
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+                ctx.lineWidth = 0.5;
+                ctx.stroke();
+
+                // Draw label if zoomed in enough
+                if (globalScale > 1.5) {
+                  ctx.font = `${fontSize}px Sans-Serif`;
+                  ctx.textAlign = 'center';
+                  ctx.textBaseline = 'top';
+                  ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+                  ctx.fillText(label, node.x, node.y + nodeR + 2);
+                }
+              }}
+              linkColor={() => 'rgba(16, 185, 129, 0.5)'}
+              linkWidth={1.5}
+              linkDirectionalArrowLength={6}
+              linkDirectionalArrowRelPos={1}
+              linkDirectionalParticles={2}
+              linkDirectionalParticleWidth={2}
+              linkDirectionalParticleSpeed={0.005}
+              linkLabel={(link: any) => link.label || link.type}
+              onNodeClick={handleNodeClick}
+              backgroundColor="#0f172a"
+              enableNodeDrag={true}
+              warmupTicks={500}
+              cooldownTicks={800}
+              d3AlphaDecay={0.01}
+              d3VelocityDecay={0.3}
+              onEngineStop={() => {
+                if (fg2DRef.current) {
+                  fg2DRef.current.zoomToFit(400, 60);
+                }
+              }}
+            />
           )}
 
           {/* Selected Node Details */}
           {selectedNode && (
-            <Card className="absolute top-4 left-4 w-96 max-h-[calc(100vh-8rem)] bg-card/95 border-border backdrop-blur-xl shadow-2xl flex flex-col overflow-hidden z-50">
+            <Card className="absolute top-4 left-4 w-96 max-h-[calc(100vh-10rem)] bg-card/95 border-border backdrop-blur-xl shadow-2xl flex flex-col overflow-hidden z-50">
               <CardHeader className="pb-2 shrink-0">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2 min-w-0">
-                    <div 
-                      className="w-4 h-4 rounded-full shrink-0" 
+                    <div
+                      className="w-4 h-4 rounded-full shrink-0"
                       style={{ backgroundColor: NODE_TYPES[selectedNode.type as keyof typeof NODE_TYPES]?.color }}
                     />
                     <CardTitle className="text-foreground text-lg truncate">{selectedNode.label}</CardTitle>
                   </div>
-                  <button 
+                  <button
                     onClick={() => setSelectedNode(null)}
                     className="text-muted-foreground hover:text-foreground shrink-0 ml-2"
                   >
                     <X className="w-4 h-4" />
                   </button>
                 </div>
-                <Badge 
+                <Badge
                   variant="outline"
                   className="w-fit mt-1"
-                  style={{ 
+                  style={{
                     backgroundColor: `${NODE_TYPES[selectedNode.type as keyof typeof NODE_TYPES]?.color}20`,
                     color: NODE_TYPES[selectedNode.type as keyof typeof NODE_TYPES]?.color,
                     borderColor: NODE_TYPES[selectedNode.type as keyof typeof NODE_TYPES]?.color
@@ -598,8 +696,8 @@ export default function StoryKnowledgeGraphPage() {
                   {selectedNode.type}
                 </Badge>
               </CardHeader>
-              <CardContent className="flex-1 overflow-hidden">
-                <ScrollArea className="h-full max-h-64">
+              <CardContent className="flex-1 min-h-0 overflow-hidden pb-4">
+                <ScrollArea className="h-full [&_[data-slot=scroll-area-thumb]]:bg-emerald-500/40 [&_[data-slot=scroll-area-scrollbar]]:w-1.5">
                   <div className="space-y-3 text-sm pr-3">
                     {Object.entries(selectedNode.properties || {}).map(([key, value]) => {
                       if (key === 'id' || !value) return null;
@@ -607,7 +705,19 @@ export default function StoryKnowledgeGraphPage() {
                         <div key={key}>
                           <div className="text-muted-foreground text-xs uppercase mb-1">{key.replace(/_/g, ' ')}</div>
                           <div className="text-foreground break-words">
-                            {Array.isArray(value) ? value.join(', ') : String(value)}
+                            {Array.isArray(value)
+                              ? value.join(', ')
+                              : typeof value === 'object' && value !== null
+                                ? (value.year || value.month || value.day
+                                  ? new Date(
+                                      value.year?.low ?? value.year ?? 0,
+                                      (value.month?.low ?? value.month ?? 1) - 1,
+                                      value.day?.low ?? value.day ?? 1,
+                                      value.hour?.low ?? value.hour ?? 0,
+                                      value.minute?.low ?? value.minute ?? 0
+                                    ).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })
+                                  : JSON.stringify(value, null, 2))
+                                : String(value)}
                           </div>
                         </div>
                       );

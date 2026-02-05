@@ -51,3 +51,6 @@ next-env.d.ts
 *.mov
 *.avi
 *.mkv
+
+.gemini
+.claude

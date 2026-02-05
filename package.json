@@ -44,6 +44,7 @@
     "pdfkit": "^0.17.2",
     "react": "19.2.0",
     "react-dom": "19.2.0",
+    "react-force-graph-2d": "^1.29.1",
     "react-force-graph-3d": "^1.29.0",
     "react-hot-toast": "^2.6.0",
     "react-markdown": "^10.1.0",

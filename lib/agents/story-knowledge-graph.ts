@@ -11,12 +11,12 @@
  */
 
 import { runQuery, runWriteTransaction, initializeSchema, getSession } from '@/lib/neo4j';
-import type { 
-  StoryAnalysisResult, 
-  Character, 
-  Location, 
-  StoryObject, 
-  Event, 
+import type {
+  StoryAnalysisResult,
+  Character,
+  Location,
+  StoryObject,
+  Event,
   Relationship,
   PlotThread,
   StateChange,
@@ -349,7 +349,7 @@ async function storeRelationships(relationships: Relationship[]): Promise<void> 
             r.strength = $strength,
             r.lastUpdated = datetime()
       `;
-      
+
       try {
         await tx.run(query, {
           sourceName: rel.source,
@@ -373,7 +373,7 @@ async function storeStateChanges(stateChanges: StateChange[], chapterId: string,
   for (const change of stateChanges) {
     await runWriteTransaction(async (tx) => {
       const stateId = `change_${change.entityId}_${change.attribute}_v${version}_${Date.now()}`;
-      
+
       await tx.run(`
         MATCH (entity:${change.entityType} { id: $entityId })
         CREATE (s:State {
@@ -404,10 +404,15 @@ async function storeStateChanges(stateChanges: StateChange[], chapterId: string,
 /**
  * Update the graph with story analysis results
  */
-export async function updateGraph(analysis: StoryAnalysisResult): Promise<{ success: boolean; message: string }> {
+export async function updateGraph(analysis: StoryAnalysisResult, replaceGraph: boolean = false): Promise<{ success: boolean; message: string }> {
   try {
     const workflowId = analysis.workflowId;
-    
+
+    // If replaceGraph is true, clear existing graph data for this workflow
+    if (replaceGraph && workflowId) {
+      await clearGraph(workflowId);
+    }
+
     // Store in sequence to maintain data integrity
     await storeChapter(analysis);
     await storeCharacters(analysis.characters, analysis.chapterId, analysis.version, workflowId);
@@ -418,15 +423,15 @@ export async function updateGraph(analysis: StoryAnalysisResult): Promise<{ succ
     await storeRelationships(analysis.relationships);
     await storeStateChanges(analysis.stateChanges, analysis.chapterId, analysis.version);
 
-    return { 
-      success: true, 
-      message: `Successfully stored ${analysis.characters.length} characters, ${analysis.locations.length} locations, ${analysis.events.length} events for workflow ${workflowId || 'unknown'}` 
+    return {
+      success: true,
+      message: `Successfully ${replaceGraph ? 'replaced' : 'updated'} graph with ${analysis.characters.length} characters, ${analysis.locations.length} locations, ${analysis.events.length} events for workflow ${workflowId || 'unknown'}`
     };
   } catch (error) {
     console.error('Failed to update graph:', error);
-    return { 
-      success: false, 
-      message: error instanceof Error ? error.message : 'Failed to update graph' 
+    return {
+      success: false,
+      message: error instanceof Error ? error.message : 'Failed to update graph'
     };
   }
 }
@@ -437,12 +442,12 @@ export async function updateGraph(analysis: StoryAnalysisResult): Promise<{ succ
 export async function getGraphOverview(workflowId?: string): Promise<GraphData> {
   try {
     const session = getSession();
-    
+
     try {
       // Build query based on whether we're filtering by workflowId
       let nodesQuery: string;
       let nodesParams: Record<string, any> = {};
-      
+
       if (workflowId) {
         // Filter by workflowId - only get nodes belonging to this workflow
         nodesQuery = `
@@ -460,14 +465,14 @@ export async function getGraphOverview(workflowId?: string): Promise<GraphData> 
           RETURN n, labels(n) as labels
         `;
       }
-      
+
       const nodesResult = await session.run(nodesQuery, nodesParams);
 
       const nodes: GraphNode[] = nodesResult.records.map(record => {
         const node = record.get('n');
         const labels = record.get('labels') as string[];
         const type = labels.find(l => ['Character', 'Location', 'Object', 'Event', 'PlotThread', 'Chapter'].includes(l)) || 'Unknown';
-        
+
         return {
           id: node.properties.id,
           label: node.properties.name || node.properties.id,
@@ -480,11 +485,11 @@ export async function getGraphOverview(workflowId?: string): Promise<GraphData> 
 
       // Get node IDs for filtering edges
       const nodeIds = nodes.map(n => n.id);
-      
+
       // Get relationships between the filtered nodes
       let edgesQuery: string;
       let edgesParams: Record<string, any> = {};
-      
+
       if (workflowId && nodeIds.length > 0) {
         edgesQuery = `
           MATCH (a)-[r]->(b)
@@ -503,13 +508,13 @@ export async function getGraphOverview(workflowId?: string): Promise<GraphData> 
         // No nodes found for this workflow
         return { nodes: [], edges: [] };
       }
-      
+
       const edgesResult = await session.run(edgesQuery, edgesParams);
 
       const edges: GraphEdge[] = edgesResult.records.map((record, index) => {
         const relType = record.get('relType');
         const props = record.get('props') || {};
-        
+
         return {
           id: `edge_${index}`,
           source: record.get('sourceId'),
@@ -536,7 +541,7 @@ export async function getGraphOverview(workflowId?: string): Promise<GraphData> 
 export async function getGraphByChapter(chapterNumber: number): Promise<GraphData> {
   try {
     const session = getSession();
-    
+
     try {
       // Get chapter and all connected nodes
       const result = await session.run(`
@@ -560,7 +565,7 @@ export async function getGraphByChapter(chapterNumber: number): Promise<GraphDat
 
       if (result.records.length > 0) {
         const record = result.records[0];
-        
+
         // Add chapter node
         const ch = record.get('ch');
         if (ch) {
@@ -688,7 +693,7 @@ export async function getAllChapters(): Promise<{ id: string; number: number; su
       RETURN ch.id as id, ch.number as number, ch.summary as summary
       ORDER BY ch.number
     `);
-    
+
     return results.map(r => ({
       id: r.id,
       number: typeof r.number === 'object' ? r.number.toNumber() : r.number,
@@ -729,7 +734,7 @@ export async function getCharacterTimeline(characterId: string): Promise<any[]> 
       RETURN s
       ORDER BY s.version, s.timestamp
     `, { characterId });
-    
+
     return results.map(r => r.s.properties);
   } catch (error) {
     console.error('Failed to get character timeline:', error);

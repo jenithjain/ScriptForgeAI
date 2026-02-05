@@ -5,7 +5,7 @@ import { updateGraph, initializeGraphSchema } from '@/lib/agents/story-knowledge
 
 export async function POST(request: NextRequest) {
   try {
-    const { text, workflowId, chapterNumber = 1 } = await request.json();
+    const { text, workflowId, chapterNumber = 1, replaceGraph = false } = await request.json();
 
     if (!text || !workflowId) {
       return NextResponse.json(
@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
 
     // 1. Analyze the new text using Gemini to extract graph elements
     const analysis = await analyzeManuscript(text, chapterNumber);
-    
+
     // Attach workflowId to analysis for database storage
     analysis.workflowId = workflowId;
     // Ensure we mark this as "user-edit" or similar if possible, but version tracking is handled inside core
@@ -26,16 +26,16 @@ export async function POST(request: NextRequest) {
     await initializeGraphSchema();
 
     // 3. Update the knowledge graph
-    const result = await updateGraph(analysis);
+    const result = await updateGraph(analysis, replaceGraph);
 
     if (result.success) {
       return NextResponse.json({
         success: true,
         message: 'Knowledge graph synchronized',
         analysisSummary: {
-            characters: analysis.characters.length,
-            locations: analysis.locations.length,
-            events: analysis.events.length
+          characters: analysis.characters.length,
+          locations: analysis.locations.length,
+          events: analysis.events.length
         }
       });
     } else {
