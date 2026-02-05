@@ -105,121 +105,6 @@ const scrollbarStyles = `
     margin-top: 12px;
   }
 
-  /* Track Changes Styles - Word Document Style */
-  .track-change-block {
-    margin: 16px 0;
-    padding: 16px;
-    border-radius: 8px;
-    background: linear-gradient(135deg, rgba(255,255,255,0.9), rgba(248,250,252,0.95));
-    border: 1px solid #e2e8f0;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-  }
-
-  .dark .track-change-block {
-    background: linear-gradient(135deg, rgba(30,30,30,0.95), rgba(20,20,20,0.98));
-    border: 1px solid #374151;
-  }
-
-  .track-change-deletion {
-    display: block;
-    background: linear-gradient(90deg, rgba(239, 68, 68, 0.15), rgba(239, 68, 68, 0.08));
-    border-left: 4px solid #ef4444;
-    padding: 12px 16px;
-    margin-bottom: 8px;
-    border-radius: 0 6px 6px 0;
-    position: relative;
-  }
-
-  .track-change-deletion-text {
-    text-decoration: line-through;
-    color: #dc2626;
-    font-weight: 500;
-  }
-
-  .track-change-addition {
-    display: block;
-    background: linear-gradient(90deg, rgba(34, 197, 94, 0.15), rgba(34, 197, 94, 0.08));
-    border-left: 4px solid #22c55e;
-    padding: 12px 16px;
-    border-radius: 0 6px 6px 0;
-    position: relative;
-  }
-
-  .track-change-addition-text {
-    color: #16a34a;
-    font-weight: 500;
-  }
-
-  .track-change-label {
-    font-size: 10px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    margin-bottom: 6px;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-  }
-
-  .track-change-label-delete {
-    color: #ef4444;
-  }
-
-  .track-change-label-add {
-    color: #22c55e;
-  }
-
-  /* Inline action buttons container */
-  .track-change-actions {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-top: 12px;
-    padding-top: 12px;
-    border-top: 1px dashed #e2e8f0;
-  }
-
-  .dark .track-change-actions {
-    border-top-color: #374151;
-  }
-
-  .track-change-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 8px 16px;
-    font-size: 12px;
-    font-weight: 600;
-    border-radius: 6px;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    border: none;
-  }
-
-  .track-change-btn-accept {
-    background: linear-gradient(135deg, #22c55e, #16a34a);
-    color: white;
-    box-shadow: 0 2px 8px rgba(34, 197, 94, 0.3);
-  }
-
-  .track-change-btn-accept:hover {
-    background: linear-gradient(135deg, #16a34a, #15803d);
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(34, 197, 94, 0.4);
-  }
-
-  .track-change-btn-reject {
-    background: linear-gradient(135deg, #ef4444, #dc2626);
-    color: white;
-    box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3);
-  }
-
-  .track-change-btn-reject:hover {
-    background: linear-gradient(135deg, #dc2626, #b91c1c);
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4);
-  }
-
   /* Comment thread marker */
   .comment-marker {
     position: absolute;
@@ -246,30 +131,6 @@ const scrollbarStyles = `
 
   .issue-highlight:hover {
     background: rgba(245, 158, 11, 0.3);
-  }
-
-  /* Source badge in change block */
-  .track-change-source {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    padding: 2px 8px;
-    font-size: 9px;
-    font-weight: 600;
-    text-transform: uppercase;
-    border-radius: 4px;
-    background: rgba(139, 92, 246, 0.15);
-    color: #8b5cf6;
-    margin-left: auto;
-  }
-
-  /* Connection line between changes */
-  .track-change-connector {
-    width: 2px;
-    height: 16px;
-    background: linear-gradient(180deg, #ef4444, #22c55e);
-    margin: 0 auto;
-    border-radius: 1px;
   }
 `;
 
@@ -388,7 +249,6 @@ export default function AIEditorPage({
   const [isProcessing, setIsProcessing] = useState(false);
   const [neo4jReferences, setNeo4jReferences] = useState([]);
   const [resolvedProblems, setResolvedProblems] = useState(new Set());
-  const [showTrackChanges, setShowTrackChanges] = useState(true);
   const [acceptedChanges, setAcceptedChanges] = useState([]);
   const [rejectedChanges, setRejectedChanges] = useState([]);
   const [pendingChangesInDoc, setPendingChangesInDoc] = useState({});
@@ -823,56 +683,59 @@ export default function AIEditorPage({
   };
 
   const handleAcceptFix = async (problem) => {
-    let fixToApply = problem.suggestedFix;
+    let fixToApply = null;
 
-    // Fallback: If no suggestion exists, ask AI to generate one now
-    if (!fixToApply || fixToApply.trim() === '') {
-        try {
-            const loadingId = toast.loading("Generating fix...");
-            
-            // Safely determine text to fix - ALWAYS prefer the full line content for context
-            let textToFix = null;
-            const currentLine = scriptLines.find(l => l.number === problem.line);
-            if (currentLine) textToFix = currentLine.content;
-            
-            // Fallback if line lookup fails
-            if (!textToFix) textToFix = problem.originalText;
+    // ALWAYS generate a fresh fix via Gemini, as the 'suggestedFix' from agents 
+    // is often just a prompt/instruction (e.g. "Provide a clearer timeline...") 
+    // rather than the actual rewritten text.
+    try {
+        const loadingId = toast.loading("Generating fix...");
+        
+        // Safely determine text to fix - ALWAYS prefer the full line content for context
+        let textToFix = null;
+        const currentLine = scriptLines.find(l => l.number === problem.line);
+        if (currentLine) textToFix = currentLine.content;
+        
+        // Fallback if line lookup fails
+        if (!textToFix) textToFix = problem.originalText;
 
-            if (!textToFix) {
-                toast.dismiss(loadingId);
-                toast.error("Cannot find text to fix.");
-                return;
-            }
-
-            // Call API
-            const response = await fetch('/api/script-editor/correct', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    issue: problem.message || problem.title, 
-                    text: textToFix 
-                })
-            });
-            
+        if (!textToFix) {
             toast.dismiss(loadingId);
-
-            if (!response.ok) throw new Error("API Failed");
-            const data = await response.json();
-
-            if (data.edits && data.edits.length > 0) {
-                fixToApply = data.edits[0].new_text;
-                // Update the problem object purely for reference
-                problem.suggestedFix = fixToApply;
-            } else {
-                toast.error("AI could not generate a fix.");
-                return;
-            }
-
-        } catch (e) {
-            console.error("Auto-fix generation failed", e);
-            toast.error("Failed to generate fix.");
+            toast.error("Cannot find text to fix.");
             return;
         }
+
+        // Use the 'suggestedFix' (instruction) as the issue description if available
+        const issueDescription = problem.suggestedFix || problem.message || problem.title;
+
+        // Call API
+        const response = await fetch('/api/script-editor/correct', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                issue: issueDescription, 
+                text: textToFix 
+            })
+        });
+        
+        toast.dismiss(loadingId);
+
+        if (!response.ok) throw new Error("API Failed");
+        const data = await response.json();
+
+        if (data.edits && data.edits.length > 0) {
+            fixToApply = data.edits[0].new_text;
+            // Update the problem object purely for reference
+            problem.suggestedFix = fixToApply;
+        } else {
+            toast.error("AI could not generate a fix.");
+            return;
+        }
+
+    } catch (e) {
+        console.error("Auto-fix generation failed", e);
+        toast.error("Failed to generate fix.");
+        return;
     }
 
     // Double check we have something to apply
@@ -1034,15 +897,6 @@ export default function AIEditorPage({
       content: `✗ Change rejected: Keeping original text`,
       timestamp: new Date()
     }]);
-  };
-
-  // Accept/Reject directly from document inline buttons
-  const handleInlineAccept = (lineNumber, problem) => {
-    handleAcceptFix(problem);
-  };
-
-  const handleInlineReject = (lineNumber, problem) => {
-    handleRejectFix(problem);
   };
 
   // Handle manual editing of script lines
@@ -1432,17 +1286,6 @@ export default function AIEditorPage({
                   </Badge>
                 )}
                 
-                {/* Track Changes Toggle */}
-                <Button
-                  variant={showTrackChanges ? "default" : "ghost"}
-                  size="sm"
-                  className={`h-7 text-xs gap-1.5 ${showTrackChanges ? 'bg-amber-500/20 text-amber-500 hover:bg-amber-500/30' : ''}`}
-                  onClick={() => setShowTrackChanges(!showTrackChanges)}
-                >
-                  {showTrackChanges ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
-                  Track Changes
-                </Button>
-                
                 <div className="flex-1" />
                 
                 {/* Stats */}
@@ -1471,7 +1314,6 @@ export default function AIEditorPage({
                   {/* Script Content */}
                   {scriptLines.map((line, idx) => {
                     const isSelected = selectedProblem?.line === line.number;
-                    const hasPendingChange = line.hasProblem && line.problem?.suggestedFix && showTrackChanges;
                     
                     return (
                       <div
@@ -1487,36 +1329,8 @@ export default function AIEditorPage({
                           {line.number}
                         </span>
                         
-                        {/* Line content with track changes */}
-                        {hasPendingChange ? (
-                          <div className="inline-block align-middle my-1">
-                            {/* RED ROW - Original Text */}
-                            <div className="flex bg-red-500 text-white mb-[1px]">
-                              <span className="px-2 py-0.5 pointer-events-none select-none">
-                                {line.problem.originalText || line.content}
-                              </span>
-                              <button 
-                                onClick={() => handleInlineReject(line.number, line.problem)}
-                                className="px-2 py-0.5 bg-red-600 hover:bg-red-700 text-[10px] uppercase font-bold tracking-wider transition-colors ml-auto border-l border-red-400"
-                              >
-                                reject
-                              </button>
-                            </div>
-                            
-                            {/* GREEN ROW - Suggested Text */}
-                            <div className="flex bg-lime-500 text-black">
-                              <span className="px-2 py-0.5 pointer-events-none select-none font-medium">
-                                {line.problem.suggestedFix}
-                              </span>
-                              <button 
-                                onClick={() => handleInlineAccept(line.number, line.problem)}
-                                className="px-2 py-0.5 bg-lime-400 hover:bg-lime-300 text-[10px] uppercase font-bold tracking-wider transition-colors ml-auto border-l border-lime-600/30"
-                              >
-                                accept
-                              </button>
-                            </div>
-                          </div>
-                        ) : line.hasProblem && !showTrackChanges ? (
+                        {/* Line content */}
+                        {line.hasProblem ? (
                           <span 
                             className="issue-highlight cursor-pointer"
                             onClick={() => handleProblemClick(line.problem)}
