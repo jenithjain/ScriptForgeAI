@@ -253,6 +253,11 @@ export default function AIEditorPage({
   const [rejectedChanges, setRejectedChanges] = useState([]);
   const [pendingChangesInDoc, setPendingChangesInDoc] = useState({});
   const [isEditing, setIsEditing] = useState(false);
+  const [showIssueHighlights, setShowIssueHighlights] = useState(true);
+  
+  // Autosave ref
+  const autosaveTimeoutRef = useRef(null);
+
   // Version Control State
   const [versions, setVersions] = useState([]);
   const [versionMessage, setVersionMessage] = useState('');
@@ -263,6 +268,37 @@ export default function AIEditorPage({
   const editorScrollRef = useRef(null);
   const lineRefs = useRef({});
   const editableRefs = useRef({});
+
+  // Sync Knowledge Graph
+  const syncGraphWithScript = async (content) => {
+      const wfId = workflow?._id || workflow?.id;
+      if (!wfId || !content) return;
+      
+      // Fire and forget (or toast promise) - don't block UI
+      toast.promise(
+          fetch('/api/script-editor/sync-graph', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                  text: content,
+                  workflowId: wfId, 
+                  chapterNumber: 1 
+              })
+          }).then(async res => {
+             if (!res.ok) throw new Error('Sync failed');
+             return res.json();
+          }),
+          {
+              loading: 'Syncing Knowledge Graph...',
+              success: 'Knowledge Graph Updated',
+              error: 'Graph Sync Failed'
+          },
+          {
+              style: { minWidth: '250px', fontSize: '12px' },
+              success: { duration: 3000 }
+          }
+      );
+  };
 
   // Version Control Functions
   const fetchVersions = useCallback(async () => {
@@ -302,6 +338,10 @@ export default function AIEditorPage({
       
       setVersionMessage('');
       toast.success('Version saved successfully');
+      
+      // Sync with Knowledge Graph on manual save as well
+      syncGraphWithScript(scriptContent);
+
       fetchVersions();
     } catch (error) {
       toast.error('Failed to save version');
@@ -761,6 +801,9 @@ export default function AIEditorPage({
       const newStringContent = updatedLines.map(l => l.content).join('\n');
       setScriptContent(newStringContent);
 
+      // Sync with Knowledge Graph
+      syncGraphWithScript(newStringContent);
+
       return updatedLines;
     });
 
@@ -901,12 +944,46 @@ export default function AIEditorPage({
 
   // Handle manual editing of script lines
   const handleLineEdit = (lineNumber, newContent) => {
-    setScriptLines(prev => prev.map(line => {
-      if (line.number === lineNumber) {
-        return { ...line, content: newContent, manuallyEdited: true };
-      }
-      return line;
-    }));
+    setScriptLines(prev => {
+        const updated = prev.map(line => {
+          if (line.number === lineNumber) {
+            return { ...line, content: newContent, manuallyEdited: true };
+          }
+          return line;
+        });
+        
+        // Update master content
+        const newStringContent = updated.map(l => l.content).join('\n');
+        setScriptContent(newStringContent);
+        
+        // Trigger Autosave
+        if (autosaveTimeoutRef.current) {
+            clearTimeout(autosaveTimeoutRef.current);
+        }
+        
+        autosaveTimeoutRef.current = setTimeout(() => {
+           if (workflow?.id) {
+             const wfId = workflow.id; // Correct ID usage
+             fetch('/api/script-editor/versions', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  workflowId: wfId,
+                  content: newStringContent,
+                  message: `Auto-save: Manual edit`,
+                  stats: { totalLines: newStringContent.split('\n').length },
+                  acceptedChanges: acceptedChanges, // Keep tracking history
+                  rejectedChanges: rejectedChanges
+                })
+             }).then(() => {
+                 fetchVersions(); 
+                 syncGraphWithScript(newStringContent);
+             });
+           }
+        }, 2000); // 2 second debounce
+
+        return updated;
+    });
   };
 
   // Handle contentEditable blur to save changes
@@ -1286,6 +1363,17 @@ export default function AIEditorPage({
                   </Badge>
                 )}
                 
+                {/* Issue Highlights Toggle */}
+                <Button
+                  variant={showIssueHighlights ? "default" : "ghost"}
+                  size="sm"
+                  className={`h-7 text-xs gap-1.5 ${showIssueHighlights ? 'bg-amber-500/20 text-amber-500 hover:bg-amber-500/30' : ''}`}
+                  onClick={() => setShowIssueHighlights(!showIssueHighlights)}
+                >
+                  {showIssueHighlights ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+                  {showIssueHighlights ? 'Issues Visible' : 'Issues Hidden'}
+                </Button>
+
                 <div className="flex-1" />
                 
                 {/* Stats */}
@@ -1330,7 +1418,7 @@ export default function AIEditorPage({
                         </span>
                         
                         {/* Line content */}
-                        {line.hasProblem ? (
+                        {line.hasProblem && showIssueHighlights ? (
                           <span 
                             className="issue-highlight cursor-pointer"
                             onClick={() => handleProblemClick(line.problem)}
