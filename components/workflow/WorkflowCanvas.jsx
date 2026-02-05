@@ -931,7 +931,7 @@ export default function WorkflowCanvas({
             className="border-border text-muted-foreground hover:text-foreground hover:bg-accent"
           >
             <Sparkles className="w-4 h-4 mr-2" />
-            AI Editor
+            AI Forger
           </Button>
           <Button
             onClick={handleExecute}

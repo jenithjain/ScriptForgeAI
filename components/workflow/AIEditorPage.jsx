@@ -1813,14 +1813,14 @@ export default function AIEditorPage({
             <div className="flex-1 overflow-hidden">
               <div className="h-full flex flex-col">
                 {/* Editor Header - Word-like toolbar */}
-                <div className="h-12 mt-14 border-b border-border bg-muted/30 flex items-center px-4 gap-3">
-                  <FileText className="w-4 h-4 text-muted-foreground" />
-                  <span className="text-sm font-medium">{workflow?.name || 'Untitled Script'}</span>
+                <div className="h-12 border-b border-border bg-muted/30 flex items-center px-4 gap-3 shrink-0">
+                  <FileText className="w-4 h-4 text-muted-foreground shrink-0" />
+                  <span className="text-sm font-medium truncate min-w-0 max-w-[300px]">{workflow?.name || 'Untitled Script'}</span>
                   {isFocusMode && <Badge variant="secondary" className="text-[10px] bg-indigo-500/10 text-indigo-500 hover:bg-indigo-500/20 gap-1"><Focus className="w-3 h-3" /> Zen Mode</Badge>}
                   <div className="h-5 w-px bg-border mx-2" />
 
                   {/* Focus Mode Toggle */}
-                  <div className="flex items-center gap-2 mr-2">
+                  <div className="flex items-center gap-2 mr-2 shrink-0">
                     <Switch
                       id="focus-mode"
                       checked={isFocusMode}
@@ -1860,7 +1860,7 @@ export default function AIEditorPage({
                   <Button
                     variant="outline"
                     size="sm"
-                    className="h-7 text-xs gap-1.5 ml-2 bg-blue-500/10 text-blue-600 border-blue-200 hover:bg-blue-500/20"
+                    className="h-7 text-xs gap-1.5 ml-2 bg-blue-500/10 text-blue-600 border-blue-200 hover:bg-blue-500/20 shrink-0"
                     onClick={() => setIsShareDialogOpen(true)}
                   >
                     <Share2 className="w-3.5 h-3.5" />
@@ -1868,7 +1868,7 @@ export default function AIEditorPage({
                   </Button>
 
                   {/* Active Collaborators */}
-                  <div className="flex items-center ml-4">
+                  <div className="flex items-center ml-4 shrink-0">
                     <div className="flex -space-x-1.5">
                       {/* Current User */}
                       <div
