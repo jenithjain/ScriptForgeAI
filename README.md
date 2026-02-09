@@ -23,7 +23,8 @@
 ## Demo Video
 
 
-https://github.com/user-attachments/assets/bdf83448-b714-48d9-b535-fc31b58bbc97
+https://github.com/user-attachments/assets/697180e9-2b69-47d7-b20c-0423194d6201
+
 
 
 
