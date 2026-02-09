@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import Footer from "@/components/Footer";
 import {
   Send, Sparkles, TrendingUp, BarChart3, DollarSign,
-  PieChart, AlertCircle, ArrowUpRight
+  PieChart, AlertCircle, ArrowUpRight, Target
 } from "lucide-react";
 
 const SUGGESTED_PROMPTS = [

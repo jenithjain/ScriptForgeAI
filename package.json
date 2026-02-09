@@ -10,6 +10,7 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@ai-sdk/google": "^3.0.23",
     "@google/genai": "^1.39.0",
     "@google/generative-ai": "^0.24.1",
     "@pdf-lib/fontkit": "^1.1.1",
@@ -26,6 +27,7 @@
     "@react-three/drei": "^10.7.6",
     "@react-three/fiber": "^9.4.0",
     "@tailwindcss/typography": "^0.5.19",
+    "ai": "^6.0.77",
     "bcryptjs": "^3.0.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -57,7 +59,7 @@
     "tailwind-merge": "^3.3.1",
     "three": "^0.180.0",
     "three-spritetext": "^1.10.0",
-    "zod": "^4.1.12",
+    "zod": "^4.3.6",
     "zustand": "^5.0.8"
   },
   "devDependencies": {

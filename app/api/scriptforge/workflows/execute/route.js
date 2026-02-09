@@ -4,7 +4,8 @@ import { authOptions } from '@/lib/auth-options';
 import connectDB from '@/lib/mongodb';
 import ScriptWorkflow from '@/lib/models/ScriptWorkflow';
 import { AGENT_DEFINITIONS } from '@/lib/agents/definitions';
-import { executeAgent } from '@/lib/agents/agent-executor';
+// Use unified executor with AI SDK (has built-in retry, timeout, crash prevention)
+import { executeAgent } from '@/lib/agents/unified-executor';
 
 /**
  * Deep clone helper for safely modifying nested objects

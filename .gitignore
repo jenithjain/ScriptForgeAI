@@ -47,6 +47,11 @@ next-env.d.ts
 /tmp/
 /tmp/**
 
+# logs (production logging output)
+/logs/
+/logs/**
+*.log
+
 # generated videos (AI-created video files)
 /public/generated-videos/
 /public/generated-videos/**

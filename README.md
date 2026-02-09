@@ -7,11 +7,12 @@
 [![Next.js](https://img.shields.io/badge/Next.js-16-black?style=for-the-badge&logo=next.js)](https://nextjs.org/)
 [![React](https://img.shields.io/badge/React-19-61DAFB?style=for-the-badge&logo=react)](https://reactjs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0-3178C6?style=for-the-badge&logo=typescript)](https://www.typescriptlang.org/)
-[![Gemini AI](https://img.shields.io/badge/Gemini-2.5_Pro-4285F4?style=for-the-badge&logo=google)](https://ai.google.dev/)
+[![Vercel AI SDK](https://img.shields.io/badge/Vercel_AI_SDK-6.0-000000?style=for-the-badge&logo=vercel)](https://sdk.vercel.ai/)
+[![Gemini AI](https://img.shields.io/badge/Gemini-2.0_Flash_+_2.5_Pro-4285F4?style=for-the-badge&logo=google)](https://ai.google.dev/)
 [![Neo4j](https://img.shields.io/badge/Neo4j-Aura-008CC1?style=for-the-badge&logo=neo4j)](https://neo4j.com/)
 [![MongoDB](https://img.shields.io/badge/MongoDB-Atlas-47A248?style=for-the-badge&logo=mongodb)](https://www.mongodb.com/)
 
-**7 Specialized AI Agents | Visual Workflow Builder | Graph-Based Story Memory | Video Generation**
+**7 Specialized AI Agents | Vercel AI SDK Framework | Production Logging | Visual Workflow Builder | Graph-Based Memory**
 
 [Features](#-key-features) • [Quick Start](#-quick-start) • [Architecture](#-architecture) • [API Docs](#-api-reference) • [Contributing](#-contributing)
 
@@ -226,9 +227,11 @@ graph LR
 | Layer | Technologies |
 |-------|-------------|
 | **Frontend** | Next.js 16, React 19, TypeScript 5, Tailwind CSS 4 |
-| **Visualization** | React Flow 11, Three.js, Force Graph 3D, Recharts |
-| **AI Models** | Gemini 2.5 Flash, Gemini 2.5 Pro, Google Veo 3.1 |
+| **AI Framework** | Vercel AI SDK 6.0 with structured outputs, retry logic, and error handling |
+| **AI Models** | Gemini 2.0 Flash (general tasks), Gemini 2.5 Pro (complex reasoning), Google Veo 3.1 |
 | **Databases** | MongoDB Atlas (documents), Neo4j Aura (graph) |
+| **Logging** | Custom production logging system with JSON output and file rotation |
+| **Visualization** | React Flow 11, Three.js, Force Graph 3D, Recharts |
 | **Auth** | NextAuth.js with bcrypt password hashing |
 | **PDF Generation** | pdf-lib (WinAnsi encoding compatible) |
 | **UI Components** | Radix UI, Lucide Icons, Framer Motion |
@@ -236,7 +239,40 @@ graph LR
 
 ---
 
-## ⚡ Performance & Optimization
+## ⚡🚀 Vercel AI SDK Integration (February 2026)
+
+**ScriptForge AI is built on Vercel AI SDK** — a production-grade framework that ensures reliable agent execution:
+
+- **🛡️ Crash Prevention** — Comprehensive error handling prevents system failures
+- **🔄 Automatic Retries** — Exponential backoff with rate limit handling (3 retries)
+- **⏱️ Smart Timeouts** — 120-second timeout for complex agents, 60s for simple queries
+- **📊 Structured Outputs** — Zod schema validation ensures type-safe AI responses
+- **🎯 Model Optimization** — Gemini 2.0 Flash for general tasks, 2.5 Pro for complex reasoning
+- **🔀 Legacy Fallback** — Unified executor with automatic fallback to legacy implementation
+
+### 📝 Production Logging System
+
+**Full debugging visibility** with professional logging infrastructure:
+
+- **📂 File-Based Logs** — Organized by category (`agents/`, `ai-provider/`, `unified-executor/`)
+- **🎨 Colored Console** — Emoji-enhanced terminal output for quick scanning
+- **📊 JSON Format** — Machine-readable logs for log analysis tools
+- **🔄 Automatic Rotation** — 10MB file limit with cleanup of logs older than 30 days
+- **🔐 Sensitive Data Redaction** — Automatic masking of API keys and passwords
+- **Vercel AI SDK** | Production-grade framework with structured outputs, retry logic, and error handling |
+| **Extended API Timeouts** | 120-second timeout for complex agents, 60s for queries (via AbortSignal) |
+| **Smart Model Selection** | Gemini 2.0 Flash (general), 2.5 Pro (complex reasoning/Neo4j) |
+| **Structured Outputs** | Zod schema validation prevents JSON parsing errors |
+| **Automatic Retries** | 3 retries with exponential backoff for transient failures |
+| **Production Logging** | File rotation, JSON output, colored console, sensitive data redaction |
+| **Workflow-Scoped Context** | Isolated contexts prevent data leakage between users |
+| **Memory Cleanup** | TTL-based cleanup for video operations (30 min) and context stores (1 hour) |
+| **Multi-Model Fallback** | Video generation: Veo 3.0 → 3.1 → 2.0 with graceful degradation |
+| **Rate Limiting** | 30-second minimum between video generation requests per user |
+| **Input Validation** | All agent inputs validated before execution
+├── workflows/2026-02-09.log        # Workflow lifecycle events
+└── errors/2026-02-09-errors.log    # Centralized error logs
+```
 
 ### Recent Optimizations (February 2026)
 
@@ -244,11 +280,13 @@ graph LR
 **Problem**: Gemini SDK was ignoring our 120-second timeout configuration, defaulting to 60 seconds and causing Knowledge Graph agent failures.
 
 **Solution**: 
-- ✅ Timeout now passed at **model creation level** via `getGenerativeModel()` second parameter
-- ✅ All model getters (`getReasoningModel`, `getKnowledgeGraphModel`, etc.) accept timeout parameter
-- ✅ Default increased from 60s to **120 seconds** (120000ms)
-- ✅ Debug logging added for timeout verification
-- ✅ Centralized model creation in `lib/gemini.ts`
+- ✅ Migrated to **Vercel AI SDK** with proper timeout handling
+- ✅ Timeout passed at **model configuration level** with AbortSignal
+- ✅ All model configurations accept timeout parameters
+- ✅ Default: **120 seconds** (120000ms) for complex agents
+- ✅ Production logging added for debugging and monitoring
+
+**Impact**: Knowledge Graph agent now completes 78-second operations successfully with full execution tracking
 
 **Impact**: Knowledge Graph agent now completes 61-second operations successfully without timeout errors.
 
@@ -275,8 +313,8 @@ graph LR
 | **Network** | Stable connection | Low latency for real-time updates |
 
 ### API Rate Limits
-
-| Service | Limit | Notes |
+0 Flash | 1500 RPM | General tasks (6 agents) |
+| Gemini 2.5 Pro | 360 RPM | Complex reasoning (Knowledge Graph)
 |---------|-------|-------|
 | Gemini 2.5 Flash | 1500 RPM | Shared across agents |
 | Gemini 2.5 Pro | 360 RPM | Used for Knowledge Graph |
@@ -521,11 +559,15 @@ ScriptForgeAI/
 │       ├── AgentDetailModal.jsx
 │       └── AgentModules.jsx
 ├── lib/                          # Core libraries
-│   ├── agents/                   # Agent definitions
-│   │   ├── definitions.ts
-│   │   ├── implementations.ts
+│   ├── agents/                   # Agent implementations
+│   │   ├── ai-sdk-executor.ts    # Vercel AI SDK agent executor
+│   │   ├── unified-executor.ts   # Unified executor with fallback
+│   │   ├── definitions.ts        # Agent type definitions
+│   │   ├── implementations.ts    # Legacy agent implementations
 │   │   └── story-intelligence-core.ts
-│   ├── gemini.ts                 # Gemini AI service
+│   ├── ai-provider.ts            # Vercel AI SDK configuration
+│   ├── logger.ts                 # Production logging system
+│   ├── gemini.ts                 # Gemini AI service (legacy)
 │   ├── neo4j.ts                  # Neo4j connection
 │   ├── mongodb.js                # MongoDB connection
 │   └── execution-engine.ts       # Workflow executor
@@ -539,9 +581,21 @@ ScriptForgeAI/
 ├── docs/                         # Documentation & images
 └── README.md                     # This file
 ```
+🏗️ System Architecture
 
----
+### Visual Overview
 
+<div align="center">
+
+![ScriptForge AI Architecture](docs/WhatsApp%20Image%202026-02-05%20at%209.35.39%20AM.jpeg)
+
+*ScriptForge AI multi-agent architecture with Neo4j knowledge graph and production logging*
+
+![System Components](docs/image.png)
+
+*Agent orchestration flow powered by Vercel AI SDK with structured outputs*
+
+</div>
 ## 📸 Screenshots
 
 > **Coming Soon:** Screenshots will be added once the UI is finalized. The platform includes a visual workflow canvas, 3D story knowledge graph visualization, agent detail modals, and comprehensive dashboard views.

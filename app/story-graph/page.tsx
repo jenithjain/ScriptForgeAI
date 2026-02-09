@@ -1,7 +1,7 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -75,7 +75,20 @@ interface GraphData {
   edges: GraphEdge[];
 }
 
+// Wrapper component with Suspense for useSearchParams
 export default function StoryKnowledgeGraphPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 to-slate-800">
+        <Loader2 className="h-8 w-8 animate-spin text-emerald-500" />
+      </div>
+    }>
+      <StoryKnowledgeGraphContent />
+    </Suspense>
+  );
+}
+
+function StoryKnowledgeGraphContent() {
   const searchParams = useSearchParams();
   const workflowId = searchParams?.get('workflowId') ?? null;
   
