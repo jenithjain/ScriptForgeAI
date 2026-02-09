@@ -20,6 +20,13 @@
 
 </div>
 
+## Demo Video
+
+
+https://github.com/user-attachments/assets/bdf83448-b714-48d9-b535-fc31b58bbc97
+
+
+
 ## Overview
 
 **ScriptForge AI** is an enterprise-grade intelligent scriptwriting platform powered by seven specialized AI agents that analyze, enhance, and transform stories. Built on the **Vercel AI SDK framework**, it provides production-ready reliability with comprehensive error handling, automatic retries, and structured outputs.
