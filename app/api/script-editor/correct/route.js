@@ -1,10 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-options';
-import { GoogleGenerativeAI } from '@google/generative-ai';
-
-// Initialize the Gemini API client
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
+import { getCustomModel } from '@/lib/gemini';
 
 export async function POST(request) {
   try {
@@ -19,13 +16,10 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Missing issue or text' }, { status: 400 });
     }
 
-    // Use a model capable of strict instruction following
-    const model = genAI.getGenerativeModel({
-      model: 'gemini-2.5-flash', // Using 2.5 Pro for better instruction following than Flash
-      generationConfig: {
-        temperature: 0.0,
-        responseMimeType: "application/json",
-      }
+    // Use a model capable of strict instruction following (with 120s timeout)
+    const model = getCustomModel('gemini-2.5-flash', {
+      temperature: 0.0,
+      responseMimeType: "application/json",
     });
 
     const systemPrompt = `You are an AI Script Correction Engine.

@@ -1,10 +1,8 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-options';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { getFlashModel } from '@/lib/gemini';
 import { runQuery } from '@/lib/neo4j';
-
-const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GEMINI_API_KEY || '');
 
 /**
  * AI Creative Assistant API
@@ -175,7 +173,7 @@ async function getStoryContext(documentId) {
  * Generate scene suggestions with video prompts
  */
 async function generateSceneSuggestions(sceneText, storyContext) {
-  const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+  const model = getFlashModel();
 
   const characterList = storyContext.characters.map(c => 
     `${c.name} (${c.role || 'character'})${c.traits ? ` - traits: ${Array.isArray(c.traits) ? c.traits.join(', ') : c.traits}` : ''}`
@@ -271,7 +269,7 @@ Return ONLY valid JSON in this exact format:
  * Generate dialogue enhancement suggestions
  */
 async function generateDialogueSuggestions(sceneText, storyContext) {
-  const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+  const model = getFlashModel();
 
   const characterDetails = storyContext.characters.map(c => 
     `${c.name}: Role: ${c.role || 'unknown'}, Traits: ${Array.isArray(c.traits) ? c.traits.join(', ') : (c.traits || 'unknown')}, Description: ${c.description || 'Not detailed'}`
@@ -346,7 +344,7 @@ Return ONLY valid JSON:
  * Generate character arc suggestions
  */
 async function generateCharacterSuggestions(sceneText, storyContext) {
-  const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+  const model = getFlashModel();
 
   const characterDetails = storyContext.characters.map(c => 
     `${c.name}: Role: ${c.role}, Traits: ${Array.isArray(c.traits) ? c.traits.join(', ') : (c.traits || 'unknown')}, Motivations: ${Array.isArray(c.motivations) ? c.motivations.join(', ') : (c.motivations || 'unknown')}`
@@ -415,7 +413,7 @@ Return ONLY valid JSON:
  * Generate plot development suggestions
  */
 async function generatePlotSuggestions(sceneText, storyContext) {
-  const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+  const model = getFlashModel();
 
   const plotThreads = storyContext.plotThreads.map(p => 
     `${p.name}: Status: ${p.status || 'active'}, Description: ${p.description || 'No details'}`
@@ -483,7 +481,7 @@ Return ONLY valid JSON:
  * Generate theme suggestions
  */
 async function generateThemeSuggestions(sceneText, storyContext) {
-  const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+  const model = getFlashModel();
 
   const prompt = `You are a thematic analysis specialist for screenwriting.
 

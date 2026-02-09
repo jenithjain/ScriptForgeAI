@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -55,6 +55,20 @@ export default function CreativeAssistant({
   const [copiedIndex, setCopiedIndex] = useState(null);
   const [videoGenerating, setVideoGenerating] = useState({});
   const [generatedVideos, setGeneratedVideos] = useState({});
+  
+  // Track active polling operations for cleanup
+  const pollingAbortRef = useRef(new Map());
+  
+  // Cleanup polling on unmount
+  useEffect(() => {
+    return () => {
+      // Cancel all active polling operations
+      pollingAbortRef.current.forEach((controller, key) => {
+        controller.abort();
+      });
+      pollingAbortRef.current.clear();
+    };
+  }, []);
 
   const intents = [
     { id: 'scene', label: 'Scenes', icon: Film, description: 'Scene suggestions' },
@@ -140,35 +154,60 @@ export default function CreativeAssistant({
   };
 
   const pollVideoStatus = async (key, operationId) => {
+    // Create AbortController for this polling operation
+    const abortController = new AbortController();
+    pollingAbortRef.current.set(key, abortController);
+    
     let attempts = 0;
     const maxAttempts = 60;
 
     const poll = async () => {
+      // Check if aborted
+      if (abortController.signal.aborted) {
+        pollingAbortRef.current.delete(key);
+        return;
+      }
+      
       if (attempts >= maxAttempts) {
         setVideoGenerating(prev => ({ ...prev, [key]: false }));
+        pollingAbortRef.current.delete(key);
         return;
       }
 
       try {
-        const response = await fetch(`/api/scriptforge/generate-video?operationId=${encodeURIComponent(operationId)}`);
+        const response = await fetch(
+          `/api/scriptforge/generate-video?operationId=${encodeURIComponent(operationId)}`,
+          { signal: abortController.signal }
+        );
         const data = await response.json();
 
         if (data.status === 'completed' && data.videoUrl) {
           setGeneratedVideos(prev => ({ ...prev, [key]: data.videoUrl }));
           setVideoGenerating(prev => ({ ...prev, [key]: false }));
+          pollingAbortRef.current.delete(key);
           return;
         }
 
         if (data.status === 'failed') {
           setVideoGenerating(prev => ({ ...prev, [key]: false }));
+          pollingAbortRef.current.delete(key);
           return;
         }
 
         attempts++;
-        setTimeout(poll, 5000);
+        if (!abortController.signal.aborted) {
+          setTimeout(poll, 5000);
+        }
       } catch (err) {
+        // Don't retry if aborted
+        if (err.name === 'AbortError') {
+          pollingAbortRef.current.delete(key);
+          return;
+        }
         attempts++;
-        setTimeout(poll, 5000);
+        if (!abortController.signal.aborted) {
+          setTimeout(poll, 5000);
+        }
       }
     };
 

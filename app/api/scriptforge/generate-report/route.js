@@ -102,6 +102,15 @@ function sanitizeText(text) {
  * COMPREHENSIVE PDF GENERATOR - Professional manuscript analysis report
  * Creates a detailed, multi-section PDF with insights from all 7 AI agents
  */
+
+// PDF Document Constants (A4 in points)
+const PDF_CONFIG = {
+  PAGE_WIDTH: 595,
+  PAGE_HEIGHT: 842,
+  MARGIN: 50,
+  get CONTENT_WIDTH() { return this.PAGE_WIDTH - (this.MARGIN * 2); }
+};
+
 async function generateComprehensivePDF(workflow, agentResults) {
   const pdfDoc = await PDFDocument.create();
   
@@ -110,10 +119,7 @@ async function generateComprehensivePDF(workflow, agentResults) {
   const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
   const fontItalic = await pdfDoc.embedFont(StandardFonts.HelveticaOblique);
 
-  const pageWidth = 595;  // A4
-  const pageHeight = 842;
-  const margin = 50;
-  const contentWidth = pageWidth - (margin * 2);
+  const { PAGE_WIDTH: pageWidth, PAGE_HEIGHT: pageHeight, MARGIN: margin, CONTENT_WIDTH: contentWidth } = PDF_CONFIG;
 
   // Helper to add new page
   const addPage = () => {

@@ -14,6 +14,40 @@ const videoOperations = new Map();
 const userLastGeneration = new Map();
 const MIN_SECONDS_BETWEEN_VIDEOS = 30; // Minimum 30 seconds between video requests
 
+// Memory cleanup constants
+const OPERATION_TTL_MS = 30 * 60 * 1000; // 30 minutes
+const CLEANUP_INTERVAL_MS = 5 * 60 * 1000; // Run cleanup every 5 minutes
+
+/**
+ * Cleanup expired video operations to prevent memory leaks
+ */
+function cleanupExpiredOperations() {
+  const now = Date.now();
+  let cleanedCount = 0;
+  
+  for (const [key, value] of videoOperations.entries()) {
+    if (value.timestamp && (now - value.timestamp) > OPERATION_TTL_MS) {
+      videoOperations.delete(key);
+      cleanedCount++;
+    }
+  }
+  
+  // Also cleanup old rate limit entries (older than 24 hours)
+  const dayAgo = now - (24 * 60 * 60 * 1000);
+  for (const [key, value] of userLastGeneration.entries()) {
+    if (value < dayAgo) {
+      userLastGeneration.delete(key);
+    }
+  }
+  
+  if (cleanedCount > 0) {
+    console.log(`[VideoOps] Cleaned up ${cleanedCount} expired operations`);
+  }
+}
+
+// Start periodic cleanup
+setInterval(cleanupExpiredOperations, CLEANUP_INTERVAL_MS);
+
 /**
  * Generate a clean file name for videos
  * Format: {projectName}_{sceneName}_{timestamp}.mp4
@@ -208,6 +242,7 @@ export async function POST(request) {
       config: configParams,
       status: 'processing',
       startedAt: new Date().toISOString(),
+      timestamp: Date.now(), // For cleanup
       client,
       // Metadata for proper naming and DB storage
       userId: session.user.id,

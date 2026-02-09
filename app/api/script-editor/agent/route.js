@@ -2,10 +2,7 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-options';
-import { GoogleGenerativeAI } from '@google/generative-ai';
-
-// Initialize the Gemini API client
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
+import { getCustomModel } from '@/lib/gemini';
 
 export async function POST(request) {
   try {
@@ -20,13 +17,10 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Missing instruction or script content' }, { status: 400 });
     }
 
-    // Use Gemini 1.5 Pro (or latest) for handling larger context and complex reasoning
-    const model = genAI.getGenerativeModel({
-      model: 'gemini-2.0-flash', // Using latest flash for speed/quality balance
-      generationConfig: {
-        temperature: 0.7, // Allow some creativity for rewriting
-        responseMimeType: "application/json",
-      }
+    // Use Gemini flash for speed/quality balance (with 120s timeout)
+    const model = getCustomModel('gemini-2.0-flash', {
+      temperature: 0.7, // Allow some creativity for rewriting
+      responseMimeType: "application/json",
     });
 
     const systemPrompt = `You are an AI Creative Co-Author and Script Doctor.

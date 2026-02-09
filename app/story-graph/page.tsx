@@ -77,7 +77,7 @@ interface GraphData {
 
 export default function StoryKnowledgeGraphPage() {
   const searchParams = useSearchParams();
-  const workflowId = searchParams.get('workflowId');
+  const workflowId = searchParams?.get('workflowId') ?? null;
   
   const fgRef = useRef<any>(null);
   const fg2DRef = useRef<any>(null);

@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI, GenerativeModel } from '@google/generative-ai';
+import { GenerativeModel } from '@google/generative-ai';
 import { 
   GenerateWorkflowRequest, 
   GenerateWorkflowResponse, 
@@ -8,16 +8,14 @@ import {
   ScriptForgeEdge
 } from '@/types/workflow';
 import { AGENT_DEFINITIONS } from './agents/definitions';
-
-const API_KEY = process.env.GOOGLE_GEMINI_API_KEY || '';
+import { getFlashModel } from './gemini';
 
 export class ScriptForgeAIService {
-  private genAI: GoogleGenerativeAI;
   private model: GenerativeModel;
 
   constructor() {
-    this.genAI = new GoogleGenerativeAI(API_KEY);
-    this.model = this.genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+    // Use the shared model getter with 120-second timeout configured
+    this.model = getFlashModel();
   }
 
   async generateWorkflow(request: GenerateWorkflowRequest, userId: string): Promise<GenerateWorkflowResponse> {
@@ -137,10 +135,15 @@ Ensure proper positioning (x, y coordinates) for a left-to-right flow with prope
         };
       });
 
+      // Truncate description to fit schema limit (2000 chars) - full content goes in brief
+      const truncatedDescription = brief.length > 1990 
+        ? brief.substring(0, 1990) + '...' 
+        : brief;
+
       const workflow: ScriptWorkflow = {
         userId,
         name: workflowData.workflowName,
-        description: brief,
+        description: truncatedDescription,
         brief,
         nodes,
         edges,

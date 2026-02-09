@@ -1,76 +1,148 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
-if (!process.env.GEMINI_API_KEY) {
-  throw new Error('GEMINI_API_KEY is not defined in environment variables');
+// Standardize API key - check both possible env var names
+const GEMINI_API_KEY = process.env.GOOGLE_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
+
+if (!GEMINI_API_KEY) {
+  throw new Error('GEMINI_API_KEY or GOOGLE_GEMINI_API_KEY is not defined in environment variables');
 }
 
 // Initialize the Gemini API client
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+
+// Default timeout for Gemini API calls (120 seconds for complex agents)
+const DEFAULT_GEMINI_TIMEOUT_MS = 120000;
+
+/**
+ * Wrap a promise with a timeout
+ */
+function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  errorMessage = 'Gemini API request timed out'
+): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error(errorMessage)), timeoutMs)
+    ),
+  ]);
+}
 
 // Reasoning/strategy: Gemini 2.5 Flash for general tasks
-export const getReasoningModel = () => {
-  return genAI.getGenerativeModel({
-    model: 'gemini-2.5-flash',
-    generationConfig: {
-      temperature: 1.0,
-      topP: 0.95,
-      maxOutputTokens: 8192,
+export const getReasoningModel = (timeoutMs: number = DEFAULT_GEMINI_TIMEOUT_MS) => {
+  console.log(`[Gemini] Creating Reasoning Model with timeout: ${timeoutMs}ms`);
+  return genAI.getGenerativeModel(
+    {
+      model: 'gemini-2.5-flash',
+      generationConfig: {
+        temperature: 1.0,
+        topP: 0.95,
+        maxOutputTokens: 8192,
+      },
     },
-  });
+    { timeout: timeoutMs } // Pass timeout at model creation level
+  );
 };
 
 // General text: Gemini 2.5 Flash
-export const getFlashModel = () => {
-  return genAI.getGenerativeModel({
-    model: 'gemini-2.5-flash',
-    generationConfig: {
-      temperature: 0.95,
-      topP: 0.95,
-      maxOutputTokens: 8192,
+export const getFlashModel = (timeoutMs: number = DEFAULT_GEMINI_TIMEOUT_MS) => {
+  return genAI.getGenerativeModel(
+    {
+      model: 'gemini-2.5-flash',
+      generationConfig: {
+        temperature: 0.95,
+        topP: 0.95,
+        maxOutputTokens: 8192,
+      },
     },
-  });
+    { timeout: timeoutMs } // Pass timeout at model creation level
+  );
 };
 
 // Knowledge Graph Model: Gemini 2.5 Pro for complex reasoning with higher token limits
-export const getKnowledgeGraphModel = () => {
-  return genAI.getGenerativeModel({
-    model: 'gemini-2.5-pro',
-    generationConfig: {
-      temperature: 0.7, // Lower temperature for more structured JSON output
-      topP: 0.95,
-      maxOutputTokens: 32768, // Much higher limit for comprehensive graph extraction
+export const getKnowledgeGraphModel = (timeoutMs: number = DEFAULT_GEMINI_TIMEOUT_MS) => {
+  console.log(`[Gemini] Creating Knowledge Graph Model with timeout: ${timeoutMs}ms`);
+  return genAI.getGenerativeModel(
+    {
+      model: 'gemini-2.5-pro',
+      generationConfig: {
+        temperature: 0.7, // Lower temperature for more structured JSON output
+        topP: 0.95,
+        maxOutputTokens: 32768, // Much higher limit for comprehensive graph extraction
+      },
     },
-  });
+    { timeout: timeoutMs } // Pass timeout at model creation level
+  );
 };
 
 // Image generation: Gemini 2.5 Flash Image (returns base64 images)
-export const getImageModel = () => {
-  return genAI.getGenerativeModel({
-    model: 'gemini-2.5-flash-image',
-    generationConfig: {
-      temperature: 1.1,
-      topP: 0.95,
-      maxOutputTokens: 2048,
+export const getImageModel = (timeoutMs: number = DEFAULT_GEMINI_TIMEOUT_MS) => {
+  return genAI.getGenerativeModel(
+    {
+      model: 'gemini-2.5-flash-image',
+      generationConfig: {
+        temperature: 1.1,
+        topP: 0.95,
+        maxOutputTokens: 2048,
+      },
     },
-  });
+    { timeout: timeoutMs } // Pass timeout at model creation level
+  );
 };
 
-// Helper to generate content with retry logic
+// Flexible model getter with custom config (for JSON response mode, etc.)
+export const getCustomModel = (
+  modelName: string = 'gemini-2.5-flash',
+  generationConfig: Record<string, any> = {},
+  timeoutMs: number = DEFAULT_GEMINI_TIMEOUT_MS
+) => {
+  return genAI.getGenerativeModel(
+    {
+      model: modelName,
+      generationConfig: {
+        temperature: 0.7,
+        topP: 0.95,
+        maxOutputTokens: 8192,
+        ...generationConfig, // Allow overrides
+      },
+    },
+    { timeout: timeoutMs } // Pass timeout at model creation level
+  );
+};
+
+// Helper to generate content with retry logic and timeout
+// NOTE: Timeout is now configured at model creation level via getGenerativeModel()
+// The timeoutMs parameter here is only used for the Promise.race wrapper as a safety net
 export async function generateWithRetry(
   model: any,
   prompt: string,
-  maxRetries = 3
+  maxRetries = 3,
+  timeoutMs = DEFAULT_GEMINI_TIMEOUT_MS
 ): Promise<string> {
+  console.log(`[Gemini] generateWithRetry called with timeout: ${timeoutMs}ms (${timeoutMs / 1000}s)`);
   let lastError: Error | null = null;
 
   for (let i = 0; i < maxRetries; i++) {
     try {
-      const result = await model.generateContent(prompt);
+      // The model should already have timeout configured via getGenerativeModel()
+      // We still wrap with our timeout as a safety net
+      const result: any = await withTimeout(
+        model.generateContent(prompt),
+        timeoutMs,
+        `Gemini API request timed out after ${timeoutMs}ms`
+      );
       const response = await result.response;
       return response.text();
     } catch (error) {
       lastError = error as Error;
       console.error(`Attempt ${i + 1} failed:`, error);
+      
+      // On timeout, try once more with same timeout (might be temporary network issue)
+      // but don't retry more than once for timeouts
+      if (lastError.message.includes('timed out') && i > 0) {
+        throw lastError;
+      }
       
       // Wait before retrying (exponential backoff)
       if (i < maxRetries - 1) {

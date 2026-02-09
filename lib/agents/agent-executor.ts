@@ -250,6 +250,22 @@ export async function executeAgent(
   agentType: string,
   context: AgentContext
 ): Promise<{ result: any; updatedContext: AgentContext }> {
+  // Input validation
+  if (!context) {
+    throw new Error('Agent context is required');
+  }
+  
+  // Validate storyBrief for agents that need it
+  const needsStoryBrief = ['story-intelligence', 'knowledge-graph', 'temporal-reasoning', 
+                           'continuity-validator', 'creative-coauthor', 'intelligent-recall', 
+                           'cinematic-teaser'];
+  
+  if (needsStoryBrief.includes(agentType)) {
+    if (!context.storyBrief || typeof context.storyBrief !== 'string' || context.storyBrief.trim().length === 0) {
+      throw new Error(`Agent '${agentType}' requires a non-empty storyBrief in context`);
+    }
+  }
+  
   const model = getReasoningModel();
   
   switch (agentType) {
@@ -855,11 +871,11 @@ async function executeCinematicTeaser(
   context: AgentContext
 ): Promise<{ result: TeaserContent; updatedContext: AgentContext }> {
   // Extract key story elements for context
-  const storyContext = context.storyContext || {};
-  const knowledgeGraph = context.knowledgeGraph || {};
-  const characters = knowledgeGraph.characters || storyContext.characters || [];
-  const locations = knowledgeGraph.locations || storyContext.locations || [];
-  const themes = storyContext.themes || knowledgeGraph.themes || [];
+  const storyContext = context.storyContext || {} as StoryContext;
+  const knowledgeGraph = context.knowledgeGraph || {} as KnowledgeGraphData;
+  const characters = knowledgeGraph.characters || (storyContext as any).characters || [];
+  const locations = knowledgeGraph.locations || (storyContext as any).locations || [];
+  const themes = (storyContext as any).themes || (knowledgeGraph as any).themes || [];
   
   const prompt = `You are the Cinematic Teaser Generator - create an epic, story-specific trailer for this story.
 

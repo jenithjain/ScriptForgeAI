@@ -201,9 +201,9 @@ export class TemporalReasoningAgent {
 }
 
 export class ContinuityValidator {
-  static async validate(knowledgeGraph, timeline, manuscript) {
-    const contradictions = this.detectContradictions(knowledgeGraph, timeline);
-    const intentionalChoices = this.classifyIntentional(contradictions);
+  static async validate(knowledgeGraph: any, timeline: any, manuscript: any) {
+    const contradictions: any[] = this.detectContradictions(knowledgeGraph, timeline);
+    const intentionalChoices: string[] = this.classifyIntentional(contradictions);
     const errors = contradictions.filter(c => !intentionalChoices.includes(c.id));
 
     return {
@@ -218,19 +218,19 @@ export class ContinuityValidator {
     };
   }
 
-  static detectContradictions(knowledgeGraph, timeline) {
+  static detectContradictions(knowledgeGraph: any, timeline: any): any[] {
     return [];
   }
 
-  static classifyIntentional(contradictions) {
+  static classifyIntentional(contradictions: any[]): string[] {
     return [];
   }
 
-  static assessSeverity(error) {
+  static assessSeverity(error: any): string {
     return 'low'; // low, medium, high, critical
   }
 
-  static calculateScore(errors) {
+  static calculateScore(errors: any[]): number {
     return Math.max(0, 100 - (errors.length * 5));
   }
 }

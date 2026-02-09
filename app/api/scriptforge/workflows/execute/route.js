@@ -87,6 +87,7 @@ async function executeSingleAgent(workflow, nodeId, agentType, customPrompt = nu
       updatedNode.data.status = 'success';
       updatedNode.data.result = result;
       updatedNode.data.output = formatAgentOutput(effectiveAgentType, result);
+      updatedNode.data.error = null; // Clear any previous error
       updatedNode.data.input = {
         storyBrief: agentContext.storyBrief?.substring(0, 500) + '...',
         hasManuscript: !!agentContext.manuscript,

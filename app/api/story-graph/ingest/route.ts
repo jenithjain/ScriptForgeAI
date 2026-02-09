@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
     const analysis = await analyzeManuscript(text, chapterNumber, existingContext);
 
     // Store in Neo4j if requested
-    let graphUpdateResult = null;
+    let graphUpdateResult: { success: boolean; message: string } | null = null;
     if (storeInGraph) {
       try {
         // Initialize schema if needed
