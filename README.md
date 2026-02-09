@@ -85,10 +85,43 @@ Intuitive drag-and-drop interface for orchestrating AI agents without coding.
 | **Cinematic Teaser** | Video Generator | Hook creation, visual prompts, Veo 3 integration |
 
 ### 🎭 Intent-Aware Continuity Checking
-The Continuity Validator distinguishes between genuine errors and intentional narrative devices:
-- Recognizes foreshadowing, Chekhov's Gun, and intentional mysteries
-- Classifies issues by severity (critical, major, minor, stylistic)
-- Provides alerts without restricting creative freedom
+The **Continuity Validator** uses advanced AI to distinguish genuine errors from deliberate narrative devices:
+
+- **🎯 Understands Narrative Intent** — Recognizes foreshadowing, Chekhov's Gun, intentional mysteries, and red herrings
+- **📊 Severity Classification** — Categories issues as critical, major, minor, or stylistic choices
+- **🎨 Creative Freedom** — Alerts without restricting artistic decisions
+- **🔍 Pattern Recognition** — Identifies setup/payoff patterns and intentional contradictions
+- **💡 Context-Aware** — Evaluates contradictions within the story's established rules and genre
+
+**Example**: If a character's eye color changes, the system determines if it's an error or intentional (shapeshifter, multiverse, unreliable narrator).
+
+### 📊 TOON (Token-Oriented Object Notation)
+Custom symbolic notation for improved AI output readability:
+
+```
+⟹ object properties    (character ⟹ name: "Aarav")
+→ array indices        (events → 0 → description)
+⊤ / ⊥ booleans         (isAlive ⊤, hasSecret ⊥)
+∅ undefined/null       (father ∅)
+```
+
+**Benefits:**
+- 🎯 **Superior Human Readability** — More intuitive than JSON brackets and braces
+- 🔍 **Visual Scanning** — Arrows and symbols guide the eye naturally
+- 📦 **Maintains Structure** — Full data integrity while improving interpretation
+- 🚀 **AI-Friendly** — Gemini models parse TOON seamlessly
+
+**Example Output:**
+```
+characters ⟹ [
+  character → 0 ⟹ {
+    name ⟹ "Aarav Malhotra"
+    role ⟹ "protagonist"
+    alive ⟹ ⊤
+    father ⟹ ∅
+  }
+]
+```
 
 ### 📄 Professional PDF Reports
 Comprehensive manuscript analysis reports combining insights from all 7 agents:
@@ -97,10 +130,15 @@ Comprehensive manuscript analysis reports combining insights from all 7 agents:
 - Continuity issues with recommendations
 - Creative suggestions and action items
 
-### 🎥 Multimodal Input Processing
-- PDF/DOCX manuscript uploads
-- Image reference processing
-- Audio note transcription (planned)
+### 🎥 Multimodal Context Processing
+**Powered by Gemini's multimodal capabilities**, ScriptForge AI processes diverse input types:
+
+- **📄 Documents** — PDF, DOCX, TXT manuscript uploads with full text extraction
+- **🖼️ Images** — Character sketches, location references, storyboards, concept art
+- **🎬 Visual Context** — Connects visual and textual references across story elements
+- **🔗 Cross-Media Memory** — Maintains context between different media types in Neo4j graph
+- **🎤 Audio** (Coming Soon) — Voice notes, dialogue recordings, interview transcripts
+- **🧠 Unified Understanding** — Gemini analyzes all inputs holistically for comprehensive story intelligence
 
 ---
 
@@ -200,18 +238,32 @@ graph LR
 
 ## ⚡ Performance & Optimization
 
-### Implemented Optimizations
+### Recent Optimizations (February 2026)
+
+#### 🚀 Gemini API Timeout Fix (Critical)
+**Problem**: Gemini SDK was ignoring our 120-second timeout configuration, defaulting to 60 seconds and causing Knowledge Graph agent failures.
+
+**Solution**: 
+- ✅ Timeout now passed at **model creation level** via `getGenerativeModel()` second parameter
+- ✅ All model getters (`getReasoningModel`, `getKnowledgeGraphModel`, etc.) accept timeout parameter
+- ✅ Default increased from 60s to **120 seconds** (120000ms)
+- ✅ Debug logging added for timeout verification
+- ✅ Centralized model creation in `lib/gemini.ts`
+
+**Impact**: Knowledge Graph agent now completes 61-second operations successfully without timeout errors.
+
+### Core Optimizations
 
 | Optimization | Description |
 |-------------|-------------|
-| **Workflow-Scoped Context** | Each workflow has isolated context to prevent data leakage between users |
-| **Request Timeouts** | 60-second timeout on all Gemini API calls to prevent hanging |
+| **Extended API Timeouts** | 120-second timeout on all Gemini API calls (fixed at SDK level) |
+| **Workflow-Scoped Context** | Isolated contexts prevent data leakage between users |
 | **Memory Cleanup** | TTL-based cleanup for video operations (30 min) and context stores (1 hour) |
 | **Exponential Backoff** | Automatic retry with backoff for transient API failures |
-| **Multi-Model Fallback** | Video generation tries Veo 3.0 → 3.1 → 2.0 with graceful degradation |
+| **Multi-Model Fallback** | Video generation: Veo 3.0 → 3.1 → 2.0 with graceful degradation |
 | **Rate Limiting** | 30-second minimum between video generation requests per user |
 | **Input Validation** | All agent inputs validated before execution |
-| **Streaming Support** | Large responses handled with chunked processing |
+| **JSON Parsing Resilience** | Handles markdown code blocks, truncation, and malformed responses |
 
 ### System Requirements
 
@@ -559,12 +611,22 @@ This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) 
 
 ## 🗺️ Roadmap
 
-- [ ] Real-time collaboration for multi-user editing
+### In Development
+- [ ] ☁️ **FORGER Editor** — Cloud-based collaborative script editor
+  - Real-time multi-user writing with shared knowledge graph updates
+  - Version control integration (Git-like branching)
+  - AI-powered conflict resolution
+  - Live cursor tracking and inline comments
+  - Workspace permissions (owner, editor, viewer)
+
+### Planned Features
 - [ ] Mobile companion app (iOS/Android)
 - [ ] Plugin system for custom agent extensions
 - [ ] Integration with Final Draft, Celtx, and WriterSolo
 - [ ] Multi-language screenplay support
 - [ ] Voice-to-text screenplay dictation
+- [ ] Automated script formatting (industry standards)
+- [ ] Export to production formats (Fountain, FDX)
 
 ---
 
@@ -575,11 +637,9 @@ This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) 
 **Made with ❤️ by the ScriptForge AI Team**
 
 [![GitHub](https://img.shields.io/badge/GitHub-100000?style=for-the-badge&logo=github&logoColor=white)](https://github.com/jenithjain/ScriptForgeAI)
-[![Website](https://img.shields.io/badge/Website-4285F4?style=for-the-badge&logo=google-chrome&logoColor=white)](https://scriptforge.ai)
-[![Documentation](https://img.shields.io/badge/Docs-FF6B6B?style=for-the-badge&logo=read-the-docs&logoColor=white)](https://docs.scriptforge.ai)
 
 ---
 
-**ScriptForge AI** © 2026 • [Website](https://scriptforge.ai) • [Documentation](https://docs.scriptforge.ai) • [Support](mailto:support@scriptforge.ai)
+**ScriptForge AI** © 2026 • Built with ❤️ for Screenwriters
 
 </div>
