@@ -20,6 +20,14 @@
 
 </div>
 
+## Demo Video
+
+
+https://github.com/user-attachments/assets/697180e9-2b69-47d7-b20c-0423194d6201
+
+
+
+
 ## Overview
 
 **ScriptForge AI** is an enterprise-grade intelligent scriptwriting platform powered by seven specialized AI agents that analyze, enhance, and transform stories. Built on the **Vercel AI SDK framework**, it provides production-ready reliability with comprehensive error handling, automatic retries, and structured outputs.
@@ -404,7 +412,7 @@ Create `.env.local` file:
 GOOGLE_GEMINI_API_KEY=your_gemini_api_key
 
 # MongoDB (required)
-MONGODB_URI=mongodb+srv://user:pass@cluster.mongodb.net/scriptforge
+MONGODB_URI=***************************************
 
 # Neo4j (required)
 NEO4J_URI=neo4j+s://xxxxx.databases.neo4j.io
