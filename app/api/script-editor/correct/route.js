@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-options';
-import { getCustomModel } from '@/lib/gemini';
+import { safeGenerateObject, z } from '@/lib/ai-provider';
 
 export async function POST(request) {
   try {
@@ -16,21 +16,17 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Missing issue or text' }, { status: 400 });
     }
 
-    // Use a model capable of strict instruction following (with 120s timeout)
-    const model = getCustomModel('gemini-2.5-flash', {
-      temperature: 0.0,
-      responseMimeType: "application/json",
+    // Zod schema guarantees valid structured output
+    const CorrectionSchema = z.object({
+      edits: z.array(z.object({
+        type: z.literal('replace'),
+        original_text: z.string().describe('Must match the input text exactly'),
+        new_text: z.string().describe('The FULLY REWRITTEN version of the input text — not just the changed word, but the complete substitute'),
+      })),
     });
 
-    const systemPrompt = `You are an AI Script Correction Engine.
+    const prompt = `You are an AI Script Correction Engine.
 Your goal is to REWRITE the input script text to fix the described issue.
-
-INPUT:
-1. Issue: A description of what is wrong.
-2. Text: The segment of the script containing the error (usually a full sentence or paragraph).
-
-OUTPUT:
-A JSON object with an "edits" array.
 
 STRICT RULES:
 1. "original_text": Must match the input "Text" exactly.
@@ -41,104 +37,23 @@ STRICT RULES:
    - The result should be a complete valid substitute for the original text.
 
 HANDLING CONSISTENCY ISSUES:
-- If the Issue describes a contradiction (e.g., "X was A before, but B now"), you must RESOLVE it by modifying the current "Text" to be consistent with the *implied correct state*.
-- Usually, if an error flags "X is B here", it means B is wrong and should optionally be changed to A (or whatever is consistent).
-- Use context clues in the Issue description.
+- If the Issue describes a contradiction (e.g., "X was A before, but B now"), resolve it by modifying the current "Text" to be consistent.
 
-EXAMPLE 1 (Replacement):
-Input Issue: "Character name typo, should be SARAH"
-Input Text: "SARA walks into the room looking tired."
-Output:
-{
-  "edits": [
-    {
-      "type": "replace",
-      "original_text": "SARA walks into the room looking tired.",
-      "new_text": "SARAH walks into the room looking tired."
-    }
-  ]
-}
-
-EXAMPLE 2 (Rewording):
-Input Issue: "Too passive"
-Input Text: "The ball was thrown by John. He smiled."
-Output:
-{
-  "edits": [
-    {
-      "type": "replace",
-      "original_text": "The ball was thrown by John. He smiled.",
-      "new_text": "John threw the ball. He smiled."
-    }
-  ]
-}
-
-EXAMPLE 3 (Consistency/Continuity):
-Input Issue: "Continuity error: The car is red in Scene 1, but blue here."
-Input Text: "He jumps into the blue sedan and speeds off."
-Output:
-{
-  "edits": [
-    {
-      "type": "replace",
-      "original_text": "He jumps into the blue sedan and speeds off.",
-      "new_text": "He jumps into the red sedan and speeds off."
-    }
-  ]
-}
-
-Result MUST be valid JSON.
-`;
-
-    const userPrompt = `
-Input:
 Issue: ${issue}
-Text: ${text}
-`;
+Text: ${text}`;
 
-    const result = await model.generateContent([systemPrompt, userPrompt]);
-    const response = result.response;
-    const textResponse = response.text();
-    
-    // Parse JSON
-    let jsonResponse;
-    try {
-        const cleanedText = textResponse.replace(/```json/g, '').replace(/```/g, '').trim();
-        jsonResponse = JSON.parse(cleanedText);
-        
-        // Normalize keys and ensure string types
-        if (jsonResponse.edits) {
-            jsonResponse.edits = jsonResponse.edits.map(edit => {
-                let newText = edit.new_text || edit.newText || edit.replacement || edit.fix || edit.corrected_text || '';
-                
-                // FINAL SAFETY CHECK: If the AI puts JSON in the string, try to unwrap it server-side
-                if (typeof newText === 'string' && newText.trim().startsWith('{') && newText.trim().endsWith('}')) {
-                     try {
-                        const inner = JSON.parse(newText);
-                        if (inner.new_text) newText = inner.new_text;
-                        else if (inner.text) newText = inner.text;
-                        // If it's a complex object we don't understand, keep original or fail? 
-                        // Let's assume if it looks like JSON, we want the value of the first likely key
-                        else {
-                           const values = Object.values(inner);
-                           if (values.length === 1 && typeof values[0] === 'string') newText = values[0];
-                        }
-                     } catch (e) { /* invalid json, treat as text */ }
-                }
+    const { object, success, error } = await safeGenerateObject(
+      prompt,
+      CorrectionSchema,
+      { model: 'flash', temperature: 0.0, timeout: 120000 }
+    );
 
-                return {
-                    type: edit.type || 'replace',
-                    original_text: edit.original_text || edit.originalText || edit.old_text || text, 
-                    new_text: newText
-                };
-            });
-        }
-    } catch (e) {
-        console.error("Failed to parse JSON response:", textResponse);
-        return NextResponse.json({ error: 'Invalid JSON response from AI', raw: textResponse }, { status: 500 });
+    if (!success || !object) {
+      console.error('Correction generation failed:', error);
+      return NextResponse.json({ error: 'AI correction failed', details: error }, { status: 500 });
     }
 
-    return NextResponse.json(jsonResponse);
+    return NextResponse.json(object);
 
   } catch (error) {
     console.error('Correction Error:', error);

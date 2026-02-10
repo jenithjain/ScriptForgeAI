@@ -2,7 +2,7 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-options';
-import { getCustomModel } from '@/lib/gemini';
+import { safeGenerateObject, z } from '@/lib/ai-provider';
 
 export async function POST(request) {
   try {
@@ -17,18 +17,20 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Missing instruction or script content' }, { status: 400 });
     }
 
-    // Use Gemini flash for speed/quality balance (with 120s timeout)
-    const model = getCustomModel('gemini-2.0-flash', {
-      temperature: 0.7, // Allow some creativity for rewriting
-      responseMimeType: "application/json",
+    // Zod schema guarantees the AI returns valid structured JSON
+    const AgentResponseSchema = z.object({
+      intent: z.enum(['edit', 'explain']).describe('Whether the user wants to edit the script or just get an explanation'),
+      explanation: z.string().describe('Plain text answer when intent is explain, empty string when intent is edit'),
+      changes: z.array(z.object({
+        type: z.literal('replace'),
+        explanation: z.string().describe('Brief explanation of the change'),
+        original_text: z.string().describe('The EXACT text block from the script being replaced'),
+        new_text: z.string().describe('The fully rewritten text block'),
+      })).describe('Array of changes when intent is edit, empty array when intent is explain'),
     });
 
-    const systemPrompt = `You are an AI Creative Co-Author and Script Doctor.
+    const prompt = `You are an AI Creative Co-Author and Script Doctor.
 You help users with their screenplay — either by editing it or by answering questions about it.
-
-INPUT:
-1. Instruction: The user's request.
-2. Script Content: The current full text of the script.
 
 STEP 1 — CLASSIFY INTENT:
 Determine if the user wants you to EDIT the script or just EXPLAIN/ANSWER something.
@@ -36,61 +38,31 @@ Determine if the user wants you to EDIT the script or just EXPLAIN/ANSWER someth
 EDIT intents: "Make the dialogue more snappy", "Change the location to a rooftop", "Fix the pacing", "Rewrite this scene", "Add more detail to..."
 EXPLAIN intents: "Explain this paragraph", "What does this mean?", "Summarize the plot", "Who is this character?", "Why is this scene important?", "Analyze the tone", "Tell me about..."
 
-STEP 2 — RESPOND:
-
-If intent is EXPLAIN (user is asking a question, NOT requesting changes):
-{
-  "intent": "explain",
-  "explanation": "Your detailed answer to the user's question in plain text. Use markdown formatting if helpful.",
-  "changes": []
-}
-
-If intent is EDIT (user wants you to modify the script):
-{
-  "intent": "edit",
-  "explanation": "",
-  "changes": [
-    {
-      "type": "replace",
-      "explanation": "Brief explanation of the change",
-      "original_text": "The EXACT text block from the script that is being replaced. Must match perfectly.",
-      "new_text": "The fully rewritten text block."
-    }
-  ]
-}
-
 RULES:
-- ALWAYS classify intent first. If the user is asking a question, NEVER return changes.
-- If the instruction implies rewriting the WHOLE script (unlikely but possible), do so.
-- If it implies a specific scene, only return that scene's text in 'original_text'.
+- ALWAYS classify intent first. If the user is asking a question, set intent to "explain" and put your answer in "explanation". Leave "changes" empty.
+- If the user wants edits, set intent to "edit" and put changes in the "changes" array. Leave "explanation" empty.
 - "original_text" should be substantial enough to be unique (at least a full line or paragraph).
 - Do not make changes that were not requested.
-- If the instruction is "Fix the typo in line 5", find the text corresponding to what looks like line 5 content (contextual) and fix it.
-`;
 
-    const userPrompt = `
 INSTRUCTION: ${instruction}
 
 SCRIPT CONTENT:
 """
 ${scriptContent}
-"""
-`;
+"""`;
 
-    const result = await model.generateContent([systemPrompt, userPrompt]);
-    const response = await result.response;
-    const jsonString = response.text();
+    const { object, success, error } = await safeGenerateObject(
+      prompt,
+      AgentResponseSchema,
+      { model: 'flash', temperature: 0.7, timeout: 120000 }
+    );
 
-    let parsedResult;
-    try {
-      parsedResult = JSON.parse(jsonString);
-    } catch (e) {
-      // Fallback or retry logic could go here
-      console.error("Agent Parse Error", e);
-      return NextResponse.json({ error: 'Failed to parse AI response' }, { status: 500 });
+    if (!success || !object) {
+      console.error('Agent generation failed:', error);
+      return NextResponse.json({ error: 'AI generation failed', details: error }, { status: 500 });
     }
 
-    return NextResponse.json(parsedResult);
+    return NextResponse.json(object);
 
   } catch (error) {
     console.error('Agent API Error:', error);
