@@ -16,22 +16,29 @@ const MIN_SECONDS_BETWEEN_VIDEOS = 30; // Minimum 30 seconds between video reque
 
 // Memory cleanup constants
 const OPERATION_TTL_MS = 30 * 60 * 1000; // 30 minutes
-const CLEANUP_INTERVAL_MS = 5 * 60 * 1000; // Run cleanup every 5 minutes
+const CLEANUP_INTERVAL_MS = 5 * 60 * 1000; // Run cleanup at most every 5 minutes
+let lastCleanupTime = 0;
 
 /**
- * Cleanup expired video operations to prevent memory leaks
+ * Cleanup expired video operations to prevent memory leaks.
+ * Called on-demand at the start of each request (serverless-safe, no setInterval).
  */
 function cleanupExpiredOperations() {
   const now = Date.now();
+
+  // Only run cleanup if enough time has passed since last cleanup
+  if (now - lastCleanupTime < CLEANUP_INTERVAL_MS) return;
+  lastCleanupTime = now;
+
   let cleanedCount = 0;
-  
+
   for (const [key, value] of videoOperations.entries()) {
     if (value.timestamp && (now - value.timestamp) > OPERATION_TTL_MS) {
       videoOperations.delete(key);
       cleanedCount++;
     }
   }
-  
+
   // Also cleanup old rate limit entries (older than 24 hours)
   const dayAgo = now - (24 * 60 * 60 * 1000);
   for (const [key, value] of userLastGeneration.entries()) {
@@ -39,14 +46,11 @@ function cleanupExpiredOperations() {
       userLastGeneration.delete(key);
     }
   }
-  
+
   if (cleanedCount > 0) {
     console.log(`[VideoOps] Cleaned up ${cleanedCount} expired operations`);
   }
 }
-
-// Start periodic cleanup
-setInterval(cleanupExpiredOperations, CLEANUP_INTERVAL_MS);
 
 /**
  * Generate a clean file name for videos
@@ -59,18 +63,18 @@ function generateVideoFileName(options = {}) {
     promptIndex = 0,
     timestamp = Date.now()
   } = options;
-  
+
   // Clean and sanitize names
   const cleanProject = projectName
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '_')
     .substring(0, 30);
-  
+
   const cleanScene = sceneName
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '_')
     .substring(0, 30);
-  
+
   return `${cleanProject}_${cleanScene}_${promptIndex}_${timestamp}.mp4`;
 }
 
@@ -86,9 +90,12 @@ function generateVideoFileName(options = {}) {
  * Uses: @google/genai with veo-3.1-generate-preview model
  */
 export async function POST(request) {
+  // Run on-demand cleanup (serverless-safe replacement for setInterval)
+  cleanupExpiredOperations();
+
   // Store request data early to avoid "unusable" error in catch block
   let requestData = {};
-  
+
   try {
     const session = await getServerSession(authOptions);
     if (!session) {
@@ -99,7 +106,7 @@ export async function POST(request) {
     const userId = session.user.id;
     const lastGen = userLastGeneration.get(userId);
     const now = Date.now();
-    
+
     if (lastGen) {
       const secondsSinceLastGen = (now - lastGen) / 1000;
       if (secondsSinceLastGen < MIN_SECONDS_BETWEEN_VIDEOS) {
@@ -116,10 +123,10 @@ export async function POST(request) {
 
     // Parse request body ONCE and store it
     requestData = await request.json();
-    
-    const { 
-      prompt, 
-      aspectRatio = '16:9', 
+
+    const {
+      prompt,
+      aspectRatio = '16:9',
       resolution = '720p',
       duration = 5,
       negativePrompt = '',
@@ -151,7 +158,7 @@ export async function POST(request) {
     console.log('Project:', { workflowId, projectName, sceneName, promptIndex });
 
     const GEMINI_API_KEY = process.env.GOOGLE_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
-    
+
     if (!GEMINI_API_KEY) {
       return NextResponse.json(
         { error: 'Gemini API key not configured' },
@@ -229,12 +236,12 @@ export async function POST(request) {
 
     // Store operation for polling
     const operationId = operation.name || `veo_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    
+
     // Debug: log the operation structure to understand the JS SDK response
     console.log('📋 Operation response structure:', JSON.stringify(operation, null, 2));
     console.log('📋 Operation name:', operation.name);
     console.log('📋 Operation keys:', Object.keys(operation || {}));
-    
+
     // Store operation with all metadata for later use when saving
     videoOperations.set(operationId, {
       operation,
@@ -280,7 +287,7 @@ export async function POST(request) {
 
   } catch (error) {
     console.error('Video Generation Error:', error);
-    
+
     // Handle specific error types
     if (error.message?.includes('quota') || error.message?.includes('RESOURCE_EXHAUSTED')) {
       return NextResponse.json({
@@ -296,7 +303,7 @@ export async function POST(request) {
         }
       }, { status: 429 });
     }
-    
+
     if (error.message?.includes('rate') || error.message?.includes('too many')) {
       return NextResponse.json({
         success: false,
@@ -310,7 +317,7 @@ export async function POST(request) {
         }
       }, { status: 429 });
     }
-    
+
     if (error.message?.includes('permission') || error.message?.includes('403')) {
       return NextResponse.json({
         success: false,
@@ -323,7 +330,7 @@ export async function POST(request) {
 
     // Return concept mode for any other error (use stored requestData instead of re-reading)
     return NextResponse.json({
-      success: true,
+      success: false,
       message: 'Video generation unavailable - showing concept mode',
       status: 'concept_only',
       shouldPoll: false,  // Tell frontend not to poll
@@ -360,7 +367,7 @@ export async function GET(request) {
 
     // Check in-memory store first
     const storedOp = videoOperations.get(operationId);
-    
+
     if (!storedOp) {
       return NextResponse.json({
         success: false,
@@ -380,7 +387,7 @@ export async function GET(request) {
     }
 
     const GEMINI_API_KEY = process.env.GOOGLE_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
-    
+
     if (!GEMINI_API_KEY) {
       return NextResponse.json({ error: 'API key not configured' }, { status: 500 });
     }
@@ -390,16 +397,16 @@ export async function GET(request) {
     // So we use the REST API: GET https://generativelanguage.googleapis.com/v1beta/{operationId}
     console.log('🔄 Polling operation status via REST API...');
     console.log('Operation ID:', operationId);
-    
+
     // The operationId is already in the format: models/veo-3.1-generate-preview/operations/xxx
     const pollUrl = `https://generativelanguage.googleapis.com/v1beta/${operationId}?key=${GEMINI_API_KEY}`;
-    
+
     const pollResponse = await fetch(pollUrl);
-    
+
     if (!pollResponse.ok) {
       const errorText = await pollResponse.text();
       console.error('Poll API Error:', pollResponse.status, errorText);
-      
+
       // If 404, the operation may have expired
       if (pollResponse.status === 404) {
         videoOperations.delete(operationId);
@@ -410,7 +417,7 @@ export async function GET(request) {
           shouldPoll: false
         }, { status: 404 });
       }
-      
+
       return NextResponse.json({
         success: false,
         status: 'poll_error',
@@ -418,21 +425,21 @@ export async function GET(request) {
         shouldPoll: false
       }, { status: pollResponse.status });
     }
-    
+
     const operation = await pollResponse.json();
     console.log('📋 Poll response:', JSON.stringify(operation, null, 2).substring(0, 500));
 
     if (operation.done) {
       console.log('✅ Video generation completed!');
-      
+
       // Get the generated video - handle the actual API response structure:
       // response.generateVideoResponse.generatedSamples[0].video.uri
       const response = operation.response || operation.result || operation;
-      
+
       // Try multiple possible paths for the video
       let generatedVideo = null;
       let videoUri = null;
-      
+
       // Path 1: generateVideoResponse.generatedSamples (actual Veo API structure)
       if (response.generateVideoResponse?.generatedSamples?.[0]) {
         generatedVideo = response.generateVideoResponse.generatedSamples[0];
@@ -451,9 +458,9 @@ export async function GET(request) {
         videoUri = generatedVideo.video?.uri;
         console.log('📍 Found video via generated_videos');
       }
-      
+
       console.log('🎥 Video URI:', videoUri);
-      
+
       if (videoUri) {
         try {
           // Create videos directory
@@ -473,18 +480,18 @@ export async function GET(request) {
 
           console.log('💾 Downloading video from:', videoUri);
           console.log('💾 Saving as:', videoFileName);
-          
+
           // Download the video from the URI
           // The URI already has the path, we just need to add the API key
           // URI format: https://generativelanguage.googleapis.com/v1beta/files/xxx:download?alt=media
-          const downloadUrl = videoUri.includes('?') 
+          const downloadUrl = videoUri.includes('?')
             ? `${videoUri}&key=${GEMINI_API_KEY}`
             : `${videoUri}?key=${GEMINI_API_KEY}`;
-          
+
           console.log('📥 Fetching from:', downloadUrl.replace(GEMINI_API_KEY, 'API_KEY_HIDDEN'));
-          
+
           const videoResponse = await fetch(downloadUrl);
-          
+
           if (!videoResponse.ok) {
             const errorText = await videoResponse.text();
             console.error('❌ Video download failed:', videoResponse.status, errorText);
@@ -495,10 +502,10 @@ export async function GET(request) {
               shouldPoll: false
             }, { status: 500 });
           }
-          
+
           const arrayBuffer = await videoResponse.arrayBuffer();
           const videoData = Buffer.from(arrayBuffer);
-          
+
           if (videoData.length > 0) {
             await writeFile(videoPath, videoData);
             console.log('💾 Video saved! Size:', (videoData.length / 1024 / 1024).toFixed(2), 'MB');
@@ -509,7 +516,7 @@ export async function GET(request) {
             if (storedOp.workflowId) {
               try {
                 await dbConnect();
-                
+
                 // Check if video already exists, update if so
                 const existingVideo = await GeneratedVideo.findOne({
                   workflowId: storedOp.workflowId,
@@ -556,11 +563,11 @@ export async function GET(request) {
                   try {
                     const workflow = await ScriptWorkflow.findById(storedOp.workflowId);
                     if (workflow && workflow.nodes) {
-                      const nodeIndex = workflow.nodes.findIndex(n => 
-                        n.id === storedOp.agentId || 
+                      const nodeIndex = workflow.nodes.findIndex(n =>
+                        n.id === storedOp.agentId ||
                         n.data?.agentType === storedOp.agentType
                       );
-                      
+
                       if (nodeIndex !== -1) {
                         // Initialize generatedVideos if it doesn't exist
                         if (!workflow.nodes[nodeIndex].data.generatedVideos) {
@@ -625,7 +632,7 @@ export async function GET(request) {
         console.log('❌ No video URI in response. Full operation:', JSON.stringify(operation, null, 2));
         storedOp.status = 'failed';
         videoOperations.set(operationId, storedOp);
-        
+
         // Check for error in operation
         if (operation.error) {
           return NextResponse.json({
@@ -636,7 +643,7 @@ export async function GET(request) {
             shouldPoll: false
           });
         }
-        
+
         return NextResponse.json({
           success: false,
           status: 'failed',
@@ -648,7 +655,7 @@ export async function GET(request) {
 
     // Still processing
     const elapsed = Math.round((Date.now() - new Date(storedOp.startedAt).getTime()) / 1000);
-    
+
     return NextResponse.json({
       success: true,
       status: 'processing',
@@ -661,7 +668,7 @@ export async function GET(request) {
     console.error('Video Status Check Error:', error);
     console.error('Error details - message:', error.message);
     console.error('Error details - stack:', error.stack?.split('\n').slice(0, 5).join('\n'));
-    
+
     return NextResponse.json({
       success: false,
       status: 'error',

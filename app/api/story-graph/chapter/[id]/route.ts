@@ -5,6 +5,8 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth-options';
 import { getGraphByChapter, getAllChapters, initializeGraphSchema } from '@/lib/agents/story-knowledge-graph';
 
 export async function GET(
@@ -12,6 +14,11 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const { id } = await params;
     const chapterNumber = parseInt(id, 10);
 
@@ -48,7 +55,7 @@ export async function GET(
   } catch (error) {
     console.error('Chapter graph error:', error);
     return NextResponse.json(
-      { 
+      {
         error: 'Failed to fetch chapter graph',
         details: error instanceof Error ? error.message : 'Unknown error'
       },

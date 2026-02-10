@@ -5,11 +5,18 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth-options';
 import { analyzeManuscript, getGlobalContext } from '@/lib/agents/story-intelligence-core';
 import { updateGraph, initializeGraphSchema } from '@/lib/agents/story-knowledge-graph';
 
 export async function POST(request: NextRequest) {
   try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const body = await request.json();
     const { text, chapterNumber = 1, storeInGraph = true } = body;
 
@@ -40,7 +47,7 @@ export async function POST(request: NextRequest) {
       try {
         // Initialize schema if needed
         await initializeGraphSchema();
-        
+
         // Update the graph
         graphUpdateResult = await updateGraph(analysis);
         console.log('Graph update result:', graphUpdateResult);
@@ -80,7 +87,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('Ingest error:', error);
     return NextResponse.json(
-      { 
+      {
         error: 'Failed to analyze text',
         details: error instanceof Error ? error.message : 'Unknown error'
       },

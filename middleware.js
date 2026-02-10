@@ -9,9 +9,9 @@ export async function middleware(request) {
 
   const { pathname } = request.nextUrl;
 
-  // Public routes
-  const publicRoutes = ['/', '/login', '/auth', '/api/auth'];
-  const isPublicRoute = publicRoutes.some(route => pathname.startsWith(route));
+  // Public routes - exact match for '/' to avoid startsWith('/') being always true
+  const isPublicRoute = pathname === '/' || 
+    ['/login', '/auth', '/api/auth'].some(route => pathname.startsWith(route));
 
   // If user is not authenticated and trying to access protected route
   if (!token && !isPublicRoute) {

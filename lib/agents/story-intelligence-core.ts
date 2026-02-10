@@ -129,7 +129,7 @@ class StoryContextManager {
     mood: 'neutral',
     tension: 'low'
   };
-  
+
   private versionHistory: Map<string, StoryAnalysisResult[]> = new Map();
   private entityRegistry: Map<string, any> = new Map();
 
@@ -213,6 +213,11 @@ class StoryContextManager {
     return Array.from(this.entityRegistry.values());
   }
 
+  getVersionCount(chapterId: string): number {
+    const versions = this.versionHistory.get(chapterId);
+    return versions ? versions.length : 0;
+  }
+
   reset(): void {
     this.globalContext = {
       activeCharacters: [],
@@ -238,36 +243,43 @@ interface ContextEntry {
 
 const contextStore = new Map<string, ContextEntry>();
 const CONTEXT_TTL_MS = 60 * 60 * 1000; // 1 hour TTL
-const CONTEXT_CLEANUP_INTERVAL_MS = 10 * 60 * 1000; // Cleanup every 10 minutes
+const CONTEXT_CLEANUP_INTERVAL_MS = 10 * 60 * 1000; // Cleanup at most every 10 minutes
+let lastContextCleanupTime = 0;
 
 /**
- * Cleanup expired context entries to prevent memory leaks
+ * Cleanup expired context entries to prevent memory leaks.
+ * Called on-demand (serverless-safe, no setInterval).
  */
 function cleanupExpiredContexts(): void {
   const now = Date.now();
+
+  // Only run cleanup if enough time has passed since last cleanup
+  if (now - lastContextCleanupTime < CONTEXT_CLEANUP_INTERVAL_MS) return;
+  lastContextCleanupTime = now;
+
   let cleanedCount = 0;
-  
+
   for (const [key, entry] of contextStore.entries()) {
     if ((now - entry.lastAccessed) > CONTEXT_TTL_MS) {
       contextStore.delete(key);
       cleanedCount++;
     }
   }
-  
+
   if (cleanedCount > 0) {
     console.log(`[StoryContext] Cleaned up ${cleanedCount} expired contexts`);
   }
 }
 
-// Start periodic cleanup
-setInterval(cleanupExpiredContexts, CONTEXT_CLEANUP_INTERVAL_MS);
-
 /**
  * Get context manager for a specific workflowId (creates new if not exists)
  */
 function getContextManager(workflowId?: string): StoryContextManager {
+  // Run on-demand cleanup (serverless-safe replacement for setInterval)
+  cleanupExpiredContexts();
+
   const key = workflowId || 'default';
-  
+
   let entry = contextStore.get(key);
   if (!entry) {
     entry = {
@@ -278,7 +290,7 @@ function getContextManager(workflowId?: string): StoryContextManager {
   } else {
     entry.lastAccessed = Date.now();
   }
-  
+
   return entry.manager;
 }
 
@@ -318,7 +330,7 @@ export async function analyzeManuscript(
   const model = getFlashModel();
   const ctxManager = getContextManager(workflowId);
   const context = existingContext || ctxManager.getGlobalContext();
-  
+
   const prompt = `You are a Story Intelligence Agent analyzing manuscript text. Extract all story elements with precision.
 
 CURRENT GLOBAL CONTEXT:
@@ -428,7 +440,7 @@ IMPORTANT:
 
   // Generate IDs for all entities
   const chapterId = `chapter_${chapterNumber}_${Date.now().toString(36)}`;
-  
+
   const characters: Character[] = (parsed.characters || []).map((c: any) => ({
     ...c,
     id: generateId('char', c.name)
@@ -476,9 +488,8 @@ IMPORTANT:
     relatedEvents: p.relatedEvents || []
   }));
 
-  // Get existing version count (use private access for versionHistory)
-  const existingVersions = (ctxManager as any).versionHistory.get(chapterId);
-  const version = existingVersions ? existingVersions.length + 1 : 1;
+  // Get existing version count
+  const version = ctxManager.getVersionCount(chapterId) + 1;
 
   const result: StoryAnalysisResult = {
     chapterId,

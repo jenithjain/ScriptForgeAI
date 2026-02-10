@@ -22,14 +22,14 @@ async function executeSingleAgent(workflow, nodeId, agentType, customPrompt = nu
     // Deep clone nodes to ensure Mongoose detects changes
     let nodesClone = deepClone(workflow.nodes);
     const nodeIndex = nodesClone.findIndex(n => n.id === nodeId);
-    
+
     if (nodeIndex === -1) {
       return NextResponse.json(
         { error: 'Node not found in workflow' },
         { status: 404 }
       );
     }
-    
+
     const node = nodesClone[nodeIndex];
 
     // Build context from workflow and any previously executed agents
@@ -45,7 +45,7 @@ async function executeSingleAgent(workflow, nodeId, agentType, customPrompt = nu
     for (const n of nodesClone) {
       if (n.id !== nodeId && n.data.result) {
         agentContext.previousResults[n.data.agentType] = n.data.result;
-        
+
         // Restore context from previous results
         if (n.data.agentType === 'story-intelligence') {
           agentContext.storyContext = n.data.result;
@@ -68,7 +68,7 @@ async function executeSingleAgent(workflow, nodeId, agentType, customPrompt = nu
     if (customPrompt) {
       node.data.customPrompt = customPrompt;
     }
-    
+
     // Reassign the entire nodes array to ensure Mongoose detects the change
     workflow.nodes = nodesClone;
     workflow.markModified('nodes');
@@ -78,7 +78,7 @@ async function executeSingleAgent(workflow, nodeId, agentType, customPrompt = nu
     // Execute the agent
     const effectiveAgentType = agentType || node.data.agentType;
     console.log(`Executing single agent: ${effectiveAgentType}`);
-    
+
     const { result, updatedContext } = await executeAgent(effectiveAgentType, agentContext);
 
     // Update node with results - re-clone to get fresh state
@@ -101,13 +101,13 @@ async function executeSingleAgent(workflow, nodeId, agentType, customPrompt = nu
       ...(workflow.analysisContext || {}),
       ...updatedContext
     };
-    
+
     // Reassign arrays/objects completely to force Mongoose to detect changes
     workflow.nodes = nodesClone;
     workflow.analysisContext = newAnalysisContext;
     workflow.markModified('nodes');
     workflow.markModified('analysisContext');
-    
+
     await workflow.save();
     console.log(`Saved workflow with node ${nodeId} status: success, result keys:`, result ? Object.keys(result) : 'null');
 
@@ -130,7 +130,7 @@ async function executeSingleAgent(workflow, nodeId, agentType, customPrompt = nu
     });
   } catch (error) {
     console.error(`Error executing single agent:`, error);
-    
+
     // Update node with error using deep clone approach
     try {
       const errorNodesClone = deepClone(workflow.nodes);
@@ -157,7 +157,7 @@ async function executeSingleAgent(workflow, nodeId, agentType, customPrompt = nu
 export async function POST(req) {
   try {
     const session = await getServerSession(authOptions);
-    
+
     if (!session?.user) {
       return NextResponse.json(
         { error: 'Unauthorized' },
@@ -197,7 +197,7 @@ export async function POST(req) {
     // Full workflow execution
     // Update status to running - use deep clone approach
     let nodesClone = deepClone(workflow.nodes);
-    
+
     workflow.status = 'running';
     workflow.lastRun = new Date();
     workflow.progress = {
@@ -213,7 +213,7 @@ export async function POST(req) {
 
     // Execute workflow nodes sequentially using the specialized agent executor
     const results = [];
-    
+
     // Build the shared agent context from workflow data
     // The story brief is the PRIMARY story input from workflow creation
     let agentContext = {
@@ -226,7 +226,7 @@ export async function POST(req) {
     for (let i = 0; i < nodesClone.length; i++) {
       const node = nodesClone[i];
       try {
-        // Update node to running
+        // Update node to running - save for real-time UI progress feedback
         node.data.status = 'running';
         workflow.progress.currentNode = node.id;
         workflow.nodes = deepClone(nodesClone);
@@ -247,7 +247,7 @@ export async function POST(req) {
         // Execute the specialized agent with shared context
         console.log(`Executing specialized agent: ${agentType}`);
         const { result, updatedContext } = await executeAgent(agentType, agentContext);
-        
+
         // Update the shared context for subsequent agents
         agentContext = updatedContext;
 
@@ -258,21 +258,15 @@ export async function POST(req) {
           result
         });
 
-        // Update node with results
+        // Update node with results in memory (persisted in final save)
         node.data.status = 'success';
         node.data.result = result;
         node.data.output = formatAgentOutput(agentType, result);
-        
-        // Update progress
+
+        // Update progress in memory
         workflow.progress.completedNodes.push(node.id);
-        
-        // Reassign the entire nodes array to ensure save
-        workflow.nodes = deepClone(nodesClone);
-        workflow.markModified('nodes');
-        workflow.markModified('progress');
-        await workflow.save();
-        console.log(`Saved workflow with node ${node.id} (${agentType}) status: success`);
-        
+        console.log(`Agent ${node.id} (${agentType}) completed successfully (will persist in final save)`);
+
       } catch (error) {
         console.error(`Error executing node ${node.id}:`, error);
         node.data.status = 'error';
@@ -281,6 +275,7 @@ export async function POST(req) {
           nodeId: node.id,
           error: error.message
         });
+        // Save on error to persist partial progress before continuing
         workflow.nodes = deepClone(nodesClone);
         workflow.markModified('nodes');
         workflow.markModified('progress');
@@ -295,10 +290,10 @@ export async function POST(req) {
     const allFailed = workflow.progress.completedNodes.length === 0;
     workflow.status = allFailed ? 'error' : (hasErrors ? 'partial' : 'completed');
     workflow.progress.currentNode = undefined;
-    
+
     // Store the full context for knowledge graph visualization
     workflow.analysisContext = agentContext;
-    
+
     // Final save with all nodes including their results
     workflow.nodes = deepClone(nodesClone);
     workflow.markModified('nodes');
@@ -330,25 +325,25 @@ function formatAgentOutput(agentType, result) {
     switch (agentType) {
       case 'story-intelligence':
         return `**Genre:** ${result.genre}\n**Themes:** ${result.themes?.join(', ')}\n**Setting:** ${result.setting}\n**Main Conflict:** ${result.mainConflict}`;
-      
+
       case 'knowledge-graph':
         return `**Characters:** ${result.characters?.length || 0}\n**Locations:** ${result.locations?.length || 0}\n**Events:** ${result.events?.length || 0}\n**Relationships:** ${result.relationships?.length || 0}\n**Plot Threads:** ${result.plotThreads?.length || 0}`;
-      
+
       case 'temporal-reasoning':
         return `**Timeline Events:** ${result.chronologicalEvents?.length || 0}\n**Flashbacks:** ${result.flashbacks?.length || 0}\n**Causal Chains:** ${result.causalChains?.length || 0}\n**Issues Found:** ${result.temporalIssues?.length || 0}`;
-      
+
       case 'continuity-validator':
         return `**Continuity Score:** ${result.continuityScore}/100\n**Contradictions:** ${result.contradictions?.length || 0}\n**Errors:** ${result.errors?.length || 0}\n**Recommendations:** ${result.recommendations?.length || 0}`;
-      
+
       case 'creative-coauthor':
         return `**Scene Suggestions:** ${result.sceneSuggestions?.length || 0}\n**Plot Developments:** ${result.plotDevelopments?.length || 0}\n**Dialogue Ideas:** ${result.dialogueImprovements?.length || 0}\n**Character Arcs:** ${result.characterArcGuidance?.length || 0}`;
-      
+
       case 'intelligent-recall':
         return `**Insights Generated:** ${result.length || 0}\n${result.slice(0, 3).map(a => `• ${a.query}`).join('\n')}`;
-      
+
       case 'cinematic-teaser':
         return `**Tagline:** ${result.tagline}\n**Visual Scenes:** ${result.visualPrompts?.length || 0}\n**Hooks:** ${result.hooks?.join(' | ')}`;
-      
+
       default:
         return typeof result === 'string' ? result : JSON.stringify(result, null, 2);
     }

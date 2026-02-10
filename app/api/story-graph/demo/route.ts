@@ -5,13 +5,15 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth-options';
 import { updateGraph, initializeGraphSchema, clearGraph } from '@/lib/agents/story-knowledge-graph';
 import type { StoryAnalysisResult } from '@/lib/agents/story-intelligence-core';
 
 // Demo story: "The Enchanted Kingdom"
 const generateDemoData = (): StoryAnalysisResult[] => {
   const baseTime = Date.now();
-  
+
   return [
     // Chapter 1: The Prophecy
     {
@@ -193,6 +195,11 @@ const generateDemoData = (): StoryAnalysisResult[] => {
 
 export async function POST(request: NextRequest) {
   try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const body = await request.json();
     const { clearExisting = false } = body;
 
@@ -206,7 +213,7 @@ export async function POST(request: NextRequest) {
 
     // Generate and store demo data
     const demoChapters = generateDemoData();
-    
+
     for (const chapter of demoChapters) {
       await updateGraph(chapter);
     }
@@ -226,7 +233,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('Demo generation error:', error);
     return NextResponse.json(
-      { 
+      {
         error: 'Failed to generate demo data',
         details: error instanceof Error ? error.message : 'Unknown error'
       },

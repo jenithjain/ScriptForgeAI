@@ -72,9 +72,9 @@ const edgeTypes = {
   custom: CustomEdge,
 };
 
-export default function WorkflowCanvas({ 
-  workflow, 
-  onSave, 
+export default function WorkflowCanvas({
+  workflow,
+  onSave,
   onExecute,
   onUpdateNodes,
   onUpdateEdges,
@@ -118,14 +118,14 @@ export default function WorkflowCanvas({
       nds.map((node) =>
         node.id === nodeId
           ? {
-              ...node,
-              data: {
-                ...node.data,
-                status,
-                result: result || node.data.result,
-                error: error || node.data.error,
-              },
-            }
+            ...node,
+            data: {
+              ...node.data,
+              status,
+              result: result || node.data.result,
+              error: error || node.data.error,
+            },
+          }
           : node
       )
     );
@@ -137,15 +137,15 @@ export default function WorkflowCanvas({
       const isDark = document.documentElement.classList.contains('dark');
       setIsDarkMode(isDark);
     };
-    
+
     updateTheme();
-    
+
     const observer = new MutationObserver(updateTheme);
     observer.observe(document.documentElement, {
       attributes: true,
       attributeFilter: ['class']
     });
-    
+
     return () => observer.disconnect();
   }, []);
 
@@ -158,7 +158,7 @@ export default function WorkflowCanvas({
       const nodesWithHandlers = layoutNodes.map(node => {
         // Get the original node data from workflow (includes saved results)
         const originalNodeData = workflow.nodes.find(n => n.id === node.id)?.data || {};
-        
+
         return {
           ...node,
           data: {
@@ -181,7 +181,7 @@ export default function WorkflowCanvas({
         };
       });
       setNodes(nodesWithHandlers);
-      
+
       // Update detailAgent if it's showing and has new data
       if (showDetailModal && detailAgent) {
         const updatedAgent = nodesWithHandlers.find(n => n.id === detailAgent.id);
@@ -189,12 +189,12 @@ export default function WorkflowCanvas({
           setDetailAgent(updatedAgent);
         }
       }
-      
-      console.log('WorkflowCanvas: Loaded nodes from workflow with preserved data:', 
+
+      console.log('WorkflowCanvas: Loaded nodes from workflow with preserved data:',
         nodesWithHandlers.map(n => ({ id: n.id, status: n.data.status, hasResult: !!n.data.result }))
       );
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workflow]);
 
   // Keep detailAgent in sync with nodes after execution
@@ -257,7 +257,7 @@ export default function WorkflowCanvas({
     // Build adjacency map
     const adjacencyMap = new Map();
     const inDegree = new Map();
-    
+
     originalNodes.forEach(node => {
       adjacencyMap.set(node.id, []);
       inDegree.set(node.id, 0);
@@ -274,7 +274,7 @@ export default function WorkflowCanvas({
 
     // Find root nodes (no incoming edges)
     const rootNodes = originalNodes.filter(node => inDegree.get(node.id) === 0);
-    
+
     // If no clear hierarchy, use grid layout
     if (rootNodes.length === 0 || rootNodes.length === originalNodes.length) {
       const columns = Math.ceil(Math.sqrt(originalNodes.length));
@@ -298,7 +298,7 @@ export default function WorkflowCanvas({
     while (queue.length > 0) {
       const { node, level } = queue.shift();
       currentLevel = Math.max(currentLevel, level);
-      
+
       const children = adjacencyMap.get(node.id) || [];
       children.forEach(childId => {
         if (!levels.has(childId)) {
@@ -326,10 +326,10 @@ export default function WorkflowCanvas({
       const nodesInLevel = nodesByLevel.get(level) || [];
       const indexInLevel = nodesInLevel.findIndex(n => n.id === node.id);
       const totalInLevel = nodesInLevel.length;
-      
+
       // Center nodes vertically within each level
       const yOffset = (indexInLevel - (totalInLevel - 1) / 2) * VERTICAL_SPACING;
-      
+
       return {
         ...node,
         position: {
@@ -382,7 +382,7 @@ export default function WorkflowCanvas({
 
     setExecutingNodeId(nodeId);
     updateNodeStatus(nodeId, 'running');
-    
+
     // Update detailAgent if modal is open for this node
     setDetailAgent(prev => {
       if (prev && prev.id === nodeId) {
@@ -396,7 +396,7 @@ export default function WorkflowCanvas({
       }
       return prev;
     });
-    
+
     toast.loading(`Running ${agentType}...`, { id: `agent-${nodeId}` });
 
     try {
@@ -419,11 +419,11 @@ export default function WorkflowCanvas({
       if (data.success) {
         updateNodeStatus(nodeId, 'success', data.result);
         toast.success(`${agentType} completed!`, { id: `agent-${nodeId}` });
-        
+
         // Update the node with full result data from server
         if (data.nodeData) {
           console.log('nodeData received from API:', data.nodeData);
-          
+
           const updatedNodeData = {
             ...data.nodeData,
             status: 'success',
@@ -431,20 +431,20 @@ export default function WorkflowCanvas({
             onRun: (type) => executeAgentById(nodeId, type, true),
             workflowId: workflow?._id,
           };
-          
+
           console.log('updatedNodeData to apply:', updatedNodeData);
-          
+
           setNodes((nds) =>
             nds.map((node) =>
               node.id === nodeId
                 ? {
-                    ...node,
-                    data: updatedNodeData,
-                  }
+                  ...node,
+                  data: updatedNodeData,
+                }
                 : node
             )
           );
-          
+
           // Force update detailAgent regardless of current state
           setDetailAgent(prev => {
             console.log('setDetailAgent callback - prev:', prev?.id, 'nodeId:', nodeId);
@@ -458,7 +458,7 @@ export default function WorkflowCanvas({
             return prev;
           });
         }
-        
+
         // Trigger a refresh to sync with DB (ensures persistence)
         // This is called after successful execution, not blocking
         setTimeout(() => {
@@ -467,7 +467,7 @@ export default function WorkflowCanvas({
       } else {
         updateNodeStatus(nodeId, 'error', null, data.error);
         toast.error(data.error || 'Agent execution failed', { id: `agent-${nodeId}` });
-        
+
         // Update detailAgent with error
         setDetailAgent(prev => {
           if (prev && prev.id === nodeId) {
@@ -487,7 +487,7 @@ export default function WorkflowCanvas({
       console.error('Agent execution error:', error);
       updateNodeStatus(nodeId, 'error', null, error.message);
       toast.error('Agent execution failed', { id: `agent-${nodeId}` });
-      
+
       // Update detailAgent with error
       setDetailAgent(prev => {
         if (prev && prev.id === nodeId) {
@@ -547,12 +547,11 @@ export default function WorkflowCanvas({
           ...agentData,
           status: 'idle',
           onNodeClick: handleNodeClick,
-          onRun: (agentType) => executeAgentById(`node-${Date.now()}`, agentType),
           workflowId: workflow?._id
         }
       };
 
-      // Re-assign onRun with the correct node id
+      // Assign onRun with the correct node id (must be after newNode is created)
       newNode.data.onRun = (agentType) => executeAgentById(newNode.id, agentType);
 
       setNodes((nds) => nds.concat(newNode));
@@ -568,8 +567,8 @@ export default function WorkflowCanvas({
         id: `edge-${Date.now()}`,
         type: 'default', // Using default type which provides smooth bezier curves
         animated: true,
-        style: { 
-          stroke: '#10B981', 
+        style: {
+          stroke: '#10B981',
           strokeWidth: 2,
         },
         markerEnd: {
@@ -611,11 +610,11 @@ export default function WorkflowCanvas({
 
   const handleExecute = async () => {
     setIsExecuting(true);
-    
+
     // Initialize progress
     const totalNodes = nodes.length;
     setLocalProgress({ completedNodes: [], totalNodes });
-    
+
     // Set all nodes to 'pending' state initially
     setNodes((nds) =>
       nds.map((node, index) => ({
@@ -635,11 +634,11 @@ export default function WorkflowCanvas({
     try {
       // Execute nodes one by one
       const completedNodes = [];
-      
+
       for (let i = 0; i < nodes.length; i++) {
         const node = nodes[i];
         const agentType = node.data.agentType;
-        
+
         // Update this node to 'running'
         setNodes((nds) =>
           nds.map((n, idx) => ({
@@ -650,9 +649,9 @@ export default function WorkflowCanvas({
             },
           }))
         );
-        
+
         toast.loading(`Running ${node.data.label || agentType}... (${i + 1}/${totalNodes})`, { id: 'workflow-execute' });
-        
+
         try {
           // Execute single agent
           const response = await fetch('/api/scriptforge/workflows/execute', {
@@ -676,7 +675,7 @@ export default function WorkflowCanvas({
               onRun: (type) => executeAgentById(node.id, type, true),
               workflowId: workflow?._id,
             };
-            
+
             setNodes((nds) =>
               nds.map((n) =>
                 n.id === node.id
@@ -684,15 +683,15 @@ export default function WorkflowCanvas({
                   : n
               )
             );
-            
+
             // Update detail modal if showing this node
             if (showDetailModal && detailAgent?.id === node.id) {
               setDetailAgent(prev => ({ ...prev, data: updatedNodeData }));
             }
-            
+
             completedNodes.push(node.id);
             setLocalProgress({ completedNodes: [...completedNodes], totalNodes });
-            
+
           } else {
             // Handle error
             setNodes((nds) =>
@@ -714,16 +713,16 @@ export default function WorkflowCanvas({
           );
         }
       }
-      
+
       toast.success(`Workflow completed! ${completedNodes.length}/${totalNodes} agents executed.`, { id: 'workflow-execute' });
-      
+
       // Trigger a refresh to sync with DB after full execution
       onRefresh?.();
-      
+
     } catch (error) {
       console.error('Workflow execution error:', error);
       toast.error('Workflow execution failed', { id: 'workflow-execute' });
-      
+
       // Reset all nodes to error on failure
       setNodes((nds) =>
         nds.map((node) => ({
@@ -773,7 +772,7 @@ export default function WorkflowCanvas({
     reader.onload = (e) => {
       try {
         const importedData = JSON.parse(e.target.result);
-        
+
         if (importedData.nodes && importedData.edges) {
           // Add click handlers, run handlers, and workflow context to imported nodes
           const nodesWithHandlers = importedData.nodes.map(node => ({
@@ -785,14 +784,14 @@ export default function WorkflowCanvas({
               workflowId: workflow?._id
             }
           }));
-          
+
           setNodes(nodesWithHandlers);
           setEdges(importedData.edges);
-          
+
           if (importedData.strategy) {
             setGeneratedStrategy(importedData.strategy);
           }
-          
+
           toast.success('Workflow imported successfully!');
           onUpdateNodes?.(nodesWithHandlers);
           onUpdateEdges?.(importedData.edges);
@@ -845,7 +844,7 @@ export default function WorkflowCanvas({
       }
       const byteArray = new Uint8Array(byteNumbers);
       const blob = new Blob([byteArray], { type: 'application/pdf' });
-      
+
       // Create download link
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -1019,319 +1018,316 @@ export default function WorkflowCanvas({
         <div
           className={`transition-all duration-300 ${showStrategy ? 'w-96' : 'w-0'} overflow-hidden bg-card/50 backdrop-blur-xl border-r border-border`}
         >
-        <div className="h-full flex flex-col">
-          <div className="p-6 shrink-0">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2.5 rounded-xl bg-emerald-500/10">
-                  <Brain className="w-5 h-5 text-emerald-500" />
+          <div className="h-full flex flex-col">
+            <div className="p-6 shrink-0">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 rounded-xl bg-emerald-500/10">
+                    <Brain className="w-5 h-5 text-emerald-500" />
+                  </div>
+                  <div>
+                    <h2 className="text-base font-bold text-foreground">
+                      AI Strategy
+                    </h2>
+                    <p className="text-xs text-muted-foreground">Workflow reasoning</p>
+                  </div>
                 </div>
-                <div>
-                  <h2 className="text-base font-bold text-foreground">
-                    AI Strategy
-                  </h2>
-                  <p className="text-xs text-muted-foreground">Workflow reasoning</p>
-                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setShowStrategy(false)}
+                  className="text-muted-foreground hover:text-foreground h-8 w-8"
+                >
+                  <X className="w-4 h-4" />
+                </Button>
               </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setShowStrategy(false)}
-                className="text-muted-foreground hover:text-foreground h-8 w-8"
-              >
-                <X className="w-4 h-4" />
-              </Button>
             </div>
-          </div>
 
-          {/* Scrollable content area */}
-          <div className="flex-1 overflow-hidden px-6">
-            <div className="h-full flex flex-col">
-              {/* Strategic Approach - Scrollable */}
-              <div className="flex-1 overflow-y-auto mb-2 workflow-sidebar-scroll pr-1">
-                <div className="pb-4">
+            {/* Scrollable content area */}
+            <div className="flex-1 overflow-hidden px-6">
+              <div className="h-full flex flex-col">
+                {/* Strategic Approach - Scrollable */}
+                <div className="flex-1 overflow-y-auto mb-2 workflow-sidebar-scroll pr-1">
+                  <div className="pb-4">
+                    <Card className="border-border/40 bg-card/50 backdrop-blur-sm">
+                      <CardHeader className="pb-2">
+                        <div
+                          className="flex items-center justify-between cursor-pointer"
+                          onClick={() => setIsStrategyExpanded(!isStrategyExpanded)}
+                        >
+                          <CardTitle className="text-sm font-semibold text-foreground flex items-center gap-2">
+                            <Sparkles className="w-4 h-4 text-emerald-500" />
+                            Strategic Approach
+                          </CardTitle>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 text-muted-foreground hover:text-foreground"
+                          >
+                            {isStrategyExpanded ? (
+                              <ChevronUp className="w-4 h-4" />
+                            ) : (
+                              <ChevronDown className="w-4 h-4" />
+                            )}
+                          </Button>
+                        </div>
+                      </CardHeader>
+                      {isStrategyExpanded && (
+                        <CardContent>
+                          {isGeneratingStrategy ? (
+                            <div className="flex items-center gap-2 text-emerald-500">
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                              <span className="text-xs">Generating strategy...</span>
+                            </div>
+                          ) : (
+                            <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap">
+                              {generatedStrategy || workflow?.description || 'This workflow orchestrates multiple AI agents to achieve your goals.'}
+                            </p>
+                          )}
+                        </CardContent>
+                      )}
+                    </Card>
+                  </div>
+                </div>
+
+                {/* Progress Card - Fixed at bottom */}
+                <div className="shrink-0 pb-6">
                   <Card className="border-border/40 bg-card/50 backdrop-blur-sm">
                     <CardHeader className="pb-2">
-                      <div
-                        className="flex items-center justify-between cursor-pointer"
-                        onClick={() => setIsStrategyExpanded(!isStrategyExpanded)}
-                      >
-                        <CardTitle className="text-sm font-semibold text-foreground flex items-center gap-2">
-                          <Sparkles className="w-4 h-4 text-emerald-500" />
-                          Strategic Approach
-                        </CardTitle>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-6 w-6 text-muted-foreground hover:text-foreground"
-                        >
-                          {isStrategyExpanded ? (
-                            <ChevronUp className="w-4 h-4" />
-                          ) : (
-                            <ChevronDown className="w-4 h-4" />
-                          )}
-                        </Button>
-                      </div>
+                      <CardTitle className="text-sm font-semibold text-foreground">Progress</CardTitle>
                     </CardHeader>
-                    {isStrategyExpanded && (
-                      <CardContent>
-                        {isGeneratingStrategy ? (
-                          <div className="flex items-center gap-2 text-emerald-500">
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                            <span className="text-xs">Generating strategy...</span>
-                          </div>
-                        ) : (
-                          <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap">
-                            {generatedStrategy || workflow?.description || 'This workflow orchestrates multiple AI agents to achieve your goals.'}
+                    <CardContent>
+                      <div className="space-y-2">
+                        <div className="flex justify-between text-xs text-muted-foreground">
+                          <span>Completed</span>
+                          <span>
+                            {localProgress.totalNodes > 0
+                              ? `${localProgress.completedNodes.length}/${localProgress.totalNodes}`
+                              : workflow?.progress
+                                ? `${workflow.progress.completedNodes?.length || 0}/${workflow.progress.totalNodes || nodes.length}`
+                                : `0/${nodes.length}`
+                            }
+                          </span>
+                        </div>
+                        <div className="w-full bg-muted rounded-full h-2 overflow-hidden">
+                          <div
+                            className="bg-emerald-500 h-full rounded-full transition-all duration-500 ease-out"
+                            style={{
+                              width: localProgress.totalNodes > 0
+                                ? `${(localProgress.completedNodes.length / localProgress.totalNodes) * 100}%`
+                                : workflow?.progress
+                                  ? `${((workflow.progress.completedNodes?.length || 0) / (workflow.progress.totalNodes || nodes.length)) * 100}%`
+                                  : '0%'
+                            }}
+                          />
+                        </div>
+                        {isExecuting && (
+                          <p className="text-xs text-emerald-500 flex items-center gap-1 mt-1">
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                            Executing workflow...
                           </p>
                         )}
-                      </CardContent>
-                    )}
+                      </div>
+                    </CardContent>
                   </Card>
                 </div>
-              </div>
-
-              {/* Progress Card - Fixed at bottom */}
-              <div className="shrink-0 pb-6">
-                <Card className="border-border/40 bg-card/50 backdrop-blur-sm">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-semibold text-foreground">Progress</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-2">
-                      <div className="flex justify-between text-xs text-muted-foreground">
-                        <span>Completed</span>
-                        <span>
-                          {localProgress.totalNodes > 0 
-                            ? `${localProgress.completedNodes.length}/${localProgress.totalNodes}`
-                            : workflow?.progress 
-                              ? `${workflow.progress.completedNodes?.length || 0}/${workflow.progress.totalNodes || nodes.length}`
-                              : `0/${nodes.length}`
-                          }
-                        </span>
-                      </div>
-                      <div className="w-full bg-muted rounded-full h-2 overflow-hidden">
-                        <div
-                          className="bg-emerald-500 h-full rounded-full transition-all duration-500 ease-out"
-                          style={{
-                            width: localProgress.totalNodes > 0
-                              ? `${(localProgress.completedNodes.length / localProgress.totalNodes) * 100}%`
-                              : workflow?.progress
-                                ? `${((workflow.progress.completedNodes?.length || 0) / (workflow.progress.totalNodes || nodes.length)) * 100}%`
-                                : '0%'
-                          }}
-                        />
-                      </div>
-                      {isExecuting && (
-                        <p className="text-xs text-emerald-500 flex items-center gap-1 mt-1">
-                          <Loader2 className="w-3 h-3 animate-spin" />
-                          Executing workflow...
-                        </p>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
               </div>
             </div>
           </div>
         </div>
-      </div>
 
-      {/* Collapse button for left sidebar */}
-      {!showStrategy && (
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setShowStrategy(true)}
-          className="absolute top-20 left-4 z-10 bg-card/80 backdrop-blur-xl border-border text-muted-foreground hover:text-foreground hover:bg-accent"
-        >
-          <ChevronRight className="w-4 h-4" />
-        </Button>
-      )}
-
-      {/* Main Canvas */}
-      <div className="flex-1 relative">
-        <ReactFlow
-          nodes={nodes}
-          edges={edges}
-          onNodesChange={onNodesChange}
-          onEdgesChange={onEdgesChange}
-          onConnect={onConnect}
-          onDrop={(e) => {
-            // Check if it's a JSON file drop
-            const files = Array.from(e.dataTransfer.files);
-            const jsonFile = files.find(file => file.type === 'application/json' || file.name.endsWith('.json'));
-            if (jsonFile) {
-              handleDropOnCanvas(e);
-            } else {
-              onDrop(e);
-            }
-          }}
-          onDragOver={(e) => {
-            onDragOver(e);
-            handleDragOverCanvas(e);
-          }}
-          onNodeClick={onNodeClick}
-          onEdgeClick={onEdgeClick}
-          nodeTypes={nodeTypes}
-          fitView
-          className="bg-background"
-        >
-          <Background 
-            variant={BackgroundVariant.Dots}
-            color={isDarkMode ? '#374151' : '#d1d5db'} 
-            gap={24} 
-            size={2}
-          />
-          <Controls className="bg-card/80 backdrop-blur-xl border border-border [&>button]:text-muted-foreground [&>button:hover]:bg-accent [&>button:hover]:text-foreground" />
-          <MiniMap 
-            nodeColor={(node) => node.data.color || '#10B981'}
-            className="bg-card/80 backdrop-blur-xl border border-border"
-            maskColor={isDarkMode ? 'rgb(15 23 42 / 0.9)' : 'rgb(241 245 249 / 0.9)'}
-          />
-        </ReactFlow>
-
-        {/* Agent Detail Modal */}
-        <AgentDetailModal
-          agent={detailAgent}
-          isOpen={showDetailModal}
-          onClose={() => setShowDetailModal(false)}
-          onRunAgent={handleRunAgentFromModal}
-        />
-
-        {/* Manuscript Input Modal for Story Intelligence */}
-        <ManuscriptInputModal
-          isOpen={showManuscriptModal}
-          onClose={() => setShowManuscriptModal(false)}
-          onAnalysisComplete={(result) => {
-            console.log('Analysis complete:', result);
-          }}
-        />
-
-        {/* Right Sidebar - Available Modules (Top to Bottom) */}
-        <div className="absolute top-4 right-4 z-10 w-80">
-          <div 
-            className={`transition-all duration-500 ease-in-out overflow-hidden bg-card/95 backdrop-blur-xl border border-border rounded-lg shadow-xl ${
-              showModules ? 'max-h-[calc(100vh-8rem)] opacity-100' : 'max-h-0 opacity-0'
-            }`}
+        {/* Collapse button for left sidebar */}
+        {!showStrategy && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowStrategy(true)}
+            className="absolute top-20 left-4 z-10 bg-card/80 backdrop-blur-xl border-border text-muted-foreground hover:text-foreground hover:bg-accent"
           >
-            <div className="flex flex-col max-h-[calc(100vh-8rem)]">
-              <div 
-                className="p-4 shrink-0 flex items-center justify-between cursor-pointer hover:bg-accent/50 transition-colors border-b border-border"
-                onClick={() => setShowModules(!showModules)}
+            <ChevronRight className="w-4 h-4" />
+          </Button>
+        )}
+
+        {/* Main Canvas */}
+        <div className="flex-1 relative">
+          <ReactFlow
+            nodes={nodes}
+            edges={edges}
+            onNodesChange={onNodesChange}
+            onEdgesChange={onEdgesChange}
+            onConnect={onConnect}
+            onDrop={(e) => {
+              // Check if it's a JSON file drop
+              const files = Array.from(e.dataTransfer.files);
+              const jsonFile = files.find(file => file.type === 'application/json' || file.name.endsWith('.json'));
+              if (jsonFile) {
+                handleDropOnCanvas(e);
+              } else {
+                onDrop(e);
+              }
+            }}
+            onDragOver={(e) => {
+              onDragOver(e);
+              handleDragOverCanvas(e);
+            }}
+            onNodeClick={onNodeClick}
+            onEdgeClick={onEdgeClick}
+            nodeTypes={nodeTypes}
+            fitView
+            className="bg-background"
+          >
+            <Background
+              variant={BackgroundVariant.Dots}
+              color={isDarkMode ? '#374151' : '#d1d5db'}
+              gap={24}
+              size={2}
+            />
+            <Controls className="bg-card/80 backdrop-blur-xl border border-border [&>button]:text-muted-foreground [&>button:hover]:bg-accent [&>button:hover]:text-foreground" />
+            <MiniMap
+              nodeColor={(node) => node.data.color || '#10B981'}
+              className="bg-card/80 backdrop-blur-xl border border-border"
+              maskColor={isDarkMode ? 'rgb(15 23 42 / 0.9)' : 'rgb(241 245 249 / 0.9)'}
+            />
+          </ReactFlow>
+
+          {/* Agent Detail Modal */}
+          <AgentDetailModal
+            agent={detailAgent}
+            isOpen={showDetailModal}
+            onClose={() => setShowDetailModal(false)}
+            onRunAgent={handleRunAgentFromModal}
+          />
+
+          {/* Manuscript Input Modal for Story Intelligence */}
+          <ManuscriptInputModal
+            isOpen={showManuscriptModal}
+            onClose={() => setShowManuscriptModal(false)}
+            onAnalysisComplete={(result) => {
+              console.log('Analysis complete:', result);
+            }}
+          />
+
+          {/* Right Sidebar - Available Modules (Top to Bottom) */}
+          <div className="absolute top-4 right-4 z-10 w-80">
+            <div
+              className={`transition-all duration-500 ease-in-out overflow-hidden bg-card/95 backdrop-blur-xl border border-border rounded-lg shadow-xl ${showModules ? 'max-h-[calc(100vh-8rem)] opacity-100' : 'max-h-0 opacity-0'
+                }`}
+            >
+              <div className="flex flex-col max-h-[calc(100vh-8rem)]">
+                <div
+                  className="p-4 shrink-0 flex items-center justify-between cursor-pointer hover:bg-accent/50 transition-colors border-b border-border"
+                  onClick={() => setShowModules(!showModules)}
+                >
+                  <h2 className="text-sm font-medium text-foreground">
+                    Available Modules
+                  </h2>
+                  <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${showModules ? '' : 'rotate-180'}`} />
+                </div>
+
+                <ScrollArea className="flex-1 p-4 overflow-y-auto workflow-sidebar-scroll">
+                  <div className="space-y-2">
+                    {Object.entries(AGENT_DEFINITIONS).map(([agentId, agent]) => (
+                      <div
+                        key={agentId}
+                        className="rounded-lg border border-border/40 bg-card/30 overflow-hidden transition-all"
+                      >
+                        {/* Agent Header - Clickable */}
+                        <div
+                          className="p-3 cursor-pointer hover:bg-card/60 transition-all"
+                          onClick={() => setExpandedAgentId(expandedAgentId === agentId ? null : agentId)}
+                        >
+                          <div className="flex items-center gap-3">
+                            <div
+                              className="p-2 rounded-lg shrink-0"
+                              style={{
+                                backgroundColor: `${agent.color}15`,
+                              }}
+                            >
+                              <AgentIcon name={agent.icon} className="w-4 h-4" color={agent.color} />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <h4 className="font-medium text-foreground text-sm">{agent.name}</h4>
+                              <p className="text-xs text-muted-foreground line-clamp-1">
+                                {agent.description.split(' - ')[1] || agent.description}
+                              </p>
+                            </div>
+                            <ChevronDown
+                              className={`w-4 h-4 text-muted-foreground transition-transform duration-200 ${expandedAgentId === agentId ? 'rotate-180' : ''
+                                }`}
+                            />
+                          </div>
+                        </div>
+
+                        {/* Agent Details - Expandable */}
+                        <div
+                          className={`transition-all duration-300 ease-in-out overflow-hidden ${expandedAgentId === agentId ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'
+                            }`}
+                        >
+                          <div className="px-3 pb-3 pt-1 border-t border-border/20">
+                            <div className="space-y-2">
+                              <div>
+                                <p className="text-xs font-medium text-foreground mb-1">Description:</p>
+                                <p className="text-xs text-muted-foreground leading-relaxed">
+                                  {agent.description}
+                                </p>
+                              </div>
+
+                              {agent.capabilities && agent.capabilities.length > 0 && (
+                                <div>
+                                  <p className="text-xs font-medium text-foreground mb-1">Capabilities:</p>
+                                  <ul className="text-xs text-muted-foreground space-y-1">
+                                    {agent.capabilities.map((capability, idx) => (
+                                      <li key={idx} className="flex items-start gap-1.5">
+                                        <span className="text-emerald-500 mt-0.5">•</span>
+                                        <span>{capability}</span>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              )}
+
+                              {agent.tools && agent.tools.length > 0 && (
+                                <div>
+                                  <p className="text-xs font-medium text-foreground mb-1">Tools:</p>
+                                  <div className="flex flex-wrap gap-1">
+                                    {agent.tools.map((tool, idx) => (
+                                      <Badge
+                                        key={idx}
+                                        variant="outline"
+                                        className="text-xs px-1.5 py-0.5"
+                                        style={{ borderColor: `${agent.color}40`, color: agent.color }}
+                                      >
+                                        {tool}
+                                      </Badge>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </ScrollArea>
+              </div>
+            </div>
+
+            {/* Toggle button when collapsed */}
+            {!showModules && (
+              <div
+                onClick={() => setShowModules(true)}
+                className="cursor-pointer bg-card/95 backdrop-blur-xl border border-border rounded-lg shadow-xl p-4 flex items-center justify-between hover:bg-accent/50 transition-colors w-full"
               >
                 <h2 className="text-sm font-medium text-foreground">
                   Available Modules
                 </h2>
-                <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${showModules ? '' : 'rotate-180'}`} />
+                <ChevronDown className="w-4 h-4 text-muted-foreground rotate-180" />
               </div>
-
-              <ScrollArea className="flex-1 p-4 overflow-y-auto workflow-sidebar-scroll">
-                <div className="space-y-2">
-                  {Object.entries(AGENT_DEFINITIONS).map(([agentId, agent]) => (
-                    <div
-                      key={agentId}
-                      className="rounded-lg border border-border/40 bg-card/30 overflow-hidden transition-all"
-                    >
-                      {/* Agent Header - Clickable */}
-                      <div
-                        className="p-3 cursor-pointer hover:bg-card/60 transition-all"
-                        onClick={() => setExpandedAgentId(expandedAgentId === agentId ? null : agentId)}
-                      >
-                        <div className="flex items-center gap-3">
-                          <div 
-                            className="p-2 rounded-lg shrink-0"
-                            style={{ 
-                              backgroundColor: `${agent.color}15`,
-                            }}
-                          >
-                            <AgentIcon name={agent.icon} className="w-4 h-4" color={agent.color} />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <h4 className="font-medium text-foreground text-sm">{agent.name}</h4>
-                            <p className="text-xs text-muted-foreground line-clamp-1">
-                              {agent.description.split(' - ')[1] || agent.description}
-                            </p>
-                          </div>
-                          <ChevronDown 
-                            className={`w-4 h-4 text-muted-foreground transition-transform duration-200 ${
-                              expandedAgentId === agentId ? 'rotate-180' : ''
-                            }`} 
-                          />
-                        </div>
-                      </div>
-
-                      {/* Agent Details - Expandable */}
-                      <div 
-                        className={`transition-all duration-300 ease-in-out overflow-hidden ${
-                          expandedAgentId === agentId ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'
-                        }`}
-                      >
-                        <div className="px-3 pb-3 pt-1 border-t border-border/20">
-                          <div className="space-y-2">
-                            <div>
-                              <p className="text-xs font-medium text-foreground mb-1">Description:</p>
-                              <p className="text-xs text-muted-foreground leading-relaxed">
-                                {agent.description}
-                              </p>
-                            </div>
-                            
-                            {agent.capabilities && agent.capabilities.length > 0 && (
-                              <div>
-                                <p className="text-xs font-medium text-foreground mb-1">Capabilities:</p>
-                                <ul className="text-xs text-muted-foreground space-y-1">
-                                  {agent.capabilities.map((capability, idx) => (
-                                    <li key={idx} className="flex items-start gap-1.5">
-                                      <span className="text-emerald-500 mt-0.5">•</span>
-                                      <span>{capability}</span>
-                                    </li>
-                                  ))}
-                                </ul>
-                              </div>
-                            )}
-
-                            {agent.tools && agent.tools.length > 0 && (
-                              <div>
-                                <p className="text-xs font-medium text-foreground mb-1">Tools:</p>
-                                <div className="flex flex-wrap gap-1">
-                                  {agent.tools.map((tool, idx) => (
-                                    <Badge 
-                                      key={idx} 
-                                      variant="outline" 
-                                      className="text-xs px-1.5 py-0.5"
-                                      style={{ borderColor: `${agent.color}40`, color: agent.color }}
-                                    >
-                                      {tool}
-                                    </Badge>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </ScrollArea>
-            </div>
+            )}
           </div>
-
-          {/* Toggle button when collapsed */}
-          {!showModules && (
-            <div 
-              onClick={() => setShowModules(true)}
-              className="cursor-pointer bg-card/95 backdrop-blur-xl border border-border rounded-lg shadow-xl p-4 flex items-center justify-between hover:bg-accent/50 transition-colors w-full"
-            >
-              <h2 className="text-sm font-medium text-foreground">
-                Available Modules
-              </h2>
-              <ChevronDown className="w-4 h-4 text-muted-foreground rotate-180" />
-            </div>
-          )}
         </div>
       </div>
-    </div>
 
       {/* Full-page AI Editor */}
       <AIEditorPage

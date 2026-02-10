@@ -1455,7 +1455,15 @@ export default function AIEditorPage({
           if (!response.ok) throw new Error("Agent Request failed");
           const data = await response.json();
 
-          if (data.changes && data.changes.length > 0) {
+          if (data.intent === 'explain' && data.explanation) {
+            // Show plain text explanation — no fix card needed
+            setChatMessages(prev => [...prev, {
+              id: `msg-${Date.now()}`,
+              role: 'assistant',
+              content: data.explanation,
+              timestamp: new Date()
+            }]);
+          } else if (data.changes && data.changes.length > 0) {
             // Convert agent changes to "Problem" style cards for the chat UI
             const newMessages = data.changes.map((change, idx) => {
               // Try to find the line number for the original text

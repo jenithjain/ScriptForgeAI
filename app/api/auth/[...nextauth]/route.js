@@ -4,6 +4,7 @@ import GoogleProvider from "next-auth/providers/google";
 import dbConnect from "@/lib/mongodb";
 import User from "@/lib/models/User";
 
+/** @type {import('next-auth').AuthOptions} */
 export const authOptions = {
   providers: [
     // Email/Password Authentication
@@ -62,7 +63,7 @@ export const authOptions = {
           } else {
             // Sign In Flow
             const user = await User.findOne({ email: normalizedEmail });
-            
+
             if (!user) {
               throw new Error('Invalid email or password');
             }
