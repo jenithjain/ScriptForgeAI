@@ -22,6 +22,7 @@ import { io } from "socket.io-client";
 import { nanoid } from 'nanoid';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
+import StoryVisualization from './StoryVisualization';
 
 // Custom scrollbar and Word document styles
 const scrollbarStyles = `
@@ -150,25 +151,127 @@ const scrollbarStyles = `
     color: white;
   }
 
-  /* Issue highlight in document */
+  /* Issue highlight in document — severity-based */
   .issue-highlight {
-    background: rgba(245, 158, 11, 0.2);
-    border-bottom: 2px wavy #f59e0b;
     cursor: pointer;
     position: relative;
   }
+  .issue-highlight.severity-critical {
+    background: rgba(239, 68, 68, 0.2);
+    border-bottom: 2px wavy #ef4444;
+  }
+  .issue-highlight.severity-critical:hover { background: rgba(239, 68, 68, 0.3); }
+  .issue-highlight.severity-error {
+    background: rgba(249, 115, 22, 0.2);
+    border-bottom: 2px wavy #f97316;
+  }
+  .issue-highlight.severity-error:hover { background: rgba(249, 115, 22, 0.3); }
+  .issue-highlight.severity-warning {
+    background: rgba(245, 158, 11, 0.2);
+    border-bottom: 2px wavy #f59e0b;
+  }
+  .issue-highlight.severity-warning:hover { background: rgba(245, 158, 11, 0.3); }
+  .issue-highlight.severity-info {
+    background: rgba(59, 130, 246, 0.15);
+    border-bottom: 2px wavy #3b82f6;
+  }
+  .issue-highlight.severity-info:hover { background: rgba(59, 130, 246, 0.25); }
 
-  .issue-highlight:hover {
-    background: rgba(245, 158, 11, 0.3);
+  /* Gutter severity indicator dot */
+  .severity-dot {
+    position: absolute;
+    left: -24px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    pointer-events: none;
+    box-shadow: 0 0 4px;
+  }
+
+  /* Issue marker tooltip — appears ABOVE the line */
+  .issue-marker-tooltip {
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 0;
+    z-index: 50;
+    background: hsl(var(--popover));
+    border: 1px solid hsl(var(--border));
+    border-radius: 10px;
+    padding: 10px 14px;
+    min-width: 260px;
+    max-width: 360px;
+    box-shadow: 0 -4px 24px rgba(0,0,0,0.25);
+    pointer-events: none;
+    animation: fadeInUp 0.15s ease;
+    white-space: normal;
+    line-height: 1.4;
+  }
+  /* Arrow pointing down to the issue line */
+  .issue-marker-tooltip::after {
+    content: '';
+    position: absolute;
+    bottom: -6px;
+    left: 20px;
+    width: 12px;
+    height: 12px;
+    background: hsl(var(--popover));
+    border-right: 1px solid hsl(var(--border));
+    border-bottom: 1px solid hsl(var(--border));
+    transform: rotate(45deg);
+  }
+  @keyframes fadeInUp {
+    from { opacity: 0; transform: translateY(4px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Character highlight */
+  .character-name-link {
+    cursor: pointer;
+    border-bottom: 1px dashed rgba(139, 92, 246, 0.4);
+    transition: all 0.15s;
+  }
+  .character-name-link:hover {
+    background: rgba(139, 92, 246, 0.15);
+    border-bottom-color: rgba(139, 92, 246, 0.8);
+  }
+
+  /* Character popup card — right side panel */
+  .character-card-panel {
+    position: fixed;
+    top: 60px;
+    right: 16px;
+    z-index: 80;
+    background: hsl(var(--popover));
+    border: 1px solid hsl(var(--border));
+    border-radius: 14px;
+    padding: 20px;
+    width: 320px;
+    max-height: calc(100vh - 100px);
+    overflow-y: auto;
+    box-shadow: 0 16px 48px rgba(0,0,0,0.3), 0 0 0 1px rgba(255,255,255,0.05);
+    animation: slideInRight 0.2s ease;
+  }
+  @keyframes slideInRight {
+    from { opacity: 0; transform: translateX(20px); }
+    to   { opacity: 1; transform: translateX(0); }
+  }
+  .character-card-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 79;
+    background: rgba(0,0,0,0.2);
   }
 `;
 
-// Issue types configuration
+// Issue types configuration — with severity levels
 const ISSUE_TYPES = {
-  error: { icon: XCircle, color: '#EF4444', label: 'Error' },
-  warning: { icon: AlertTriangle, color: '#F59E0B', label: 'Warning' },
-  info: { icon: Info, color: '#3B82F6', label: 'Info' },
-  hint: { icon: Sparkles, color: '#10B981', label: 'Hint' }
+  critical: { icon: XCircle, color: '#EF4444', label: 'Critical', dot: 'bg-red-500' },
+  error: { icon: XCircle, color: '#F97316', label: 'Error', dot: 'bg-orange-500' },
+  warning: { icon: AlertTriangle, color: '#F59E0B', label: 'Warning', dot: 'bg-amber-500' },
+  info: { icon: Info, color: '#3B82F6', label: 'Info', dot: 'bg-blue-500' },
+  hint: { icon: Sparkles, color: '#10B981', label: 'Hint', dot: 'bg-emerald-500' }
 };
 
 const CATEGORY_ICONS = {
@@ -176,6 +279,37 @@ const CATEGORY_ICONS = {
   temporal: Clock,
   continuity: GitCompare,
   style: Pencil
+};
+
+// Screenplay formatting CSS — applied per line type
+const FORMAT_STYLES = {
+  screenplay: {
+    'scene-heading': 'font-bold uppercase tracking-wide',
+    'character': 'uppercase text-center font-semibold',
+    'dialogue': 'pl-16 pr-16',
+    'parenthetical': 'pl-20 pr-20 italic text-muted-foreground text-sm',
+    'transition': 'text-right uppercase text-xs tracking-widest text-muted-foreground',
+    'action': '',
+    'empty': '',
+  },
+  novel: {
+    'scene-heading': 'text-xl font-bold mt-6 mb-2',
+    'character': 'font-semibold',
+    'dialogue': '',
+    'parenthetical': 'italic text-muted-foreground text-sm',
+    'transition': 'text-center text-xs text-muted-foreground mt-4',
+    'action': 'leading-relaxed',
+    'empty': '',
+  },
+  episodic: {
+    'scene-heading': 'font-bold uppercase tracking-wide border-b border-border pb-1 mb-2',
+    'character': 'uppercase text-center font-semibold text-sm',
+    'dialogue': 'pl-12 pr-12',
+    'parenthetical': 'pl-16 pr-16 italic text-muted-foreground text-sm',
+    'transition': 'text-right uppercase text-xs tracking-widest text-muted-foreground',
+    'action': '',
+    'empty': '',
+  }
 };
 
 // Helper function to detect line type for screenplay formatting
@@ -284,6 +418,9 @@ export default function AIEditorPage({
   const [isEditing, setIsEditing] = useState(false);
   const [showIssueHighlights, setShowIssueHighlights] = useState(true);
 
+  // Multi-Format Support
+  const [scriptFormat, setScriptFormat] = useState('screenplay'); // screenplay, novel, episodic
+
   // Real-time Collaboration State
   const [socket, setSocket] = useState(null);
   const [collaborators, setCollaborators] = useState({}); // { [userId]: { name, color, line, timestamp } }
@@ -292,6 +429,18 @@ export default function AIEditorPage({
 
   // Focus / Zen Mode
   const [isFocusMode, setIsFocusMode] = useState(false);
+
+  // Story Visualization
+  const [isVisualizationOpen, setIsVisualizationOpen] = useState(false);
+
+  // Auto-Save State
+  const [autoSaveStatus, setAutoSaveStatus] = useState('saved'); // 'saved' | 'saving' | 'unsaved'
+  const autoSaveTimerRef = useRef(null);
+  const lastSavedContentRef = useRef('');
+
+  // Character Card State
+  const [activeCharacterCard, setActiveCharacterCard] = useState(null); // { character, x, y }
+  const [hoveredIssueId, setHoveredIssueId] = useState(null);
 
   // Toggle Focus Mode
   const toggleFocusMode = useCallback((enabled) => {
@@ -559,6 +708,58 @@ export default function AIEditorPage({
     }
   };
 
+  // ============================================================
+  // DEBOUNCED AUTO-SAVE (every 30 seconds)
+  // ============================================================
+  useEffect(() => {
+    if (!scriptContent) return;
+
+    // Mark as unsaved when content changes
+    if (scriptContent !== lastSavedContentRef.current) {
+      setAutoSaveStatus('unsaved');
+    }
+
+    // Clear old timer
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current);
+    }
+
+    // Set new 30-second auto-save timer
+    autoSaveTimerRef.current = setTimeout(async () => {
+      const wfId = workflow?._id || workflow?.id;
+      if (!wfId || !scriptContent || scriptContent === lastSavedContentRef.current) return;
+
+      setAutoSaveStatus('saving');
+      try {
+        const res = await fetch('/api/script-editor/versions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            workflowId: wfId,
+            content: scriptContent,
+            message: 'Auto-save',
+            stats: { totalLines: scriptContent.split('\n').length },
+            acceptedChanges,
+            rejectedChanges
+          })
+        });
+        if (res.ok) {
+          lastSavedContentRef.current = scriptContent;
+          setAutoSaveStatus('saved');
+          fetchVersions();
+        } else {
+          setAutoSaveStatus('unsaved');
+        }
+      } catch {
+        setAutoSaveStatus('unsaved');
+      }
+    }, 30000);
+
+    return () => {
+      if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    };
+  }, [scriptContent, workflow, acceptedChanges, rejectedChanges, fetchVersions]);
+
   const handleRestoreVersion = (version, e) => {
     // Aggressively prevent default behavior
     if (e) {
@@ -745,9 +946,19 @@ export default function AIEditorPage({
       }
 
 
+      // Map AI severity levels to issue types
+      const severityToType = (sev) => {
+        if (sev === 'critical') return 'critical';
+        if (sev === 'high') return 'error';
+        if (sev === 'medium') return 'warning';
+        if (sev === 'low') return 'info';
+        return type === 'error' ? 'error' : 'warning';
+      };
+
       const problem = {
         id: `problem-${problemIndex++}`,
-        type: data.severity === 'high' ? 'error' : data.severity === 'low' ? 'info' : 'warning',
+        type: severityToType(data.severity),
+        severity: data.severity || 'medium',
         category,
         title: data.title || data.type || 'Issue Detected',
         message: data.description || data.message || String(data),
@@ -836,6 +1047,26 @@ export default function AIEditorPage({
 
     setProblems(extractedProblems);
     setNeo4jReferences(extractedReferences);
+
+    // Auto-save style profile from Story Intelligence results
+    const storyIntelNode = nodes.find(n => n?.data?.agentType === 'story-intelligence');
+    const storyIntelData = storyIntelNode?.data?.result || storyIntelNode?.data?.output;
+    if (storyIntelData && typeof storyIntelData === 'object' && storyIntelData.genre) {
+      fetch('/api/style-profile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          storyIntel: storyIntelData,
+          workflowId: workflow?._id || workflow?.id || '',
+        }),
+      }).then(res => res.json())
+        .then(data => {
+          if (data.profile) {
+            console.log('[Style Learning]', data.message);
+          }
+        })
+        .catch(err => console.warn('[Style Learning] Auto-save failed:', err));
+    }
 
     // Initial AI message
     if (extractedProblems.length > 0 && chatMessages.length === 0) {
@@ -1586,6 +1817,129 @@ export default function AIEditorPage({
 
   const getTypeStyles = (type) => ISSUE_TYPES[type] || ISSUE_TYPES.warning;
 
+  // Extract graph and timeline data from agent nodes for visualization
+  const vizGraphData = useMemo(() => {
+    if (!nodes || nodes.length === 0) return { nodes: [], edges: [] };
+    const kgNode = nodes.find(n => n?.data?.agentType === 'knowledge-graph');
+    const kgData = kgNode?.data?.result || kgNode?.data?.output;
+    if (!kgData) return { nodes: [], edges: [] };
+
+    const vizNodes = [];
+    const vizEdges = [];
+
+    // Characters
+    (kgData.characters || []).forEach(c => {
+      vizNodes.push({ id: c.id, name: c.name, type: 'Character', properties: { description: c.description, role: c.role, traits: c.traits, status: c.status } });
+    });
+    // Locations
+    (kgData.locations || []).forEach(l => {
+      vizNodes.push({ id: l.id, name: l.name, type: 'Location', properties: { description: l.description, type: l.type } });
+    });
+    // Events
+    (kgData.events || []).forEach(e => {
+      vizNodes.push({ id: e.id, name: e.name, type: 'Event', properties: { description: e.description, chapter: e.chapter, timestamp: e.timestamp } });
+    });
+    // Plot Threads
+    (kgData.plotThreads || []).forEach(pt => {
+      vizNodes.push({ id: pt.id, name: pt.name, type: 'PlotThread', properties: { description: pt.description, status: pt.status } });
+    });
+    // Relationships
+    (kgData.relationships || []).forEach(r => {
+      vizEdges.push({ source: r.from || r.source, target: r.to || r.target, label: r.type || r.label || 'related' });
+    });
+
+    return { nodes: vizNodes, edges: vizEdges };
+  }, [nodes]);
+
+  const vizTimelineData = useMemo(() => {
+    if (!nodes || nodes.length === 0) return null;
+    const trNode = nodes.find(n => n?.data?.agentType === 'temporal-reasoning');
+    return trNode?.data?.result || trNode?.data?.output || null;
+  }, [nodes]);
+
+  // Extract character data from Knowledge Graph for character cards
+  const characterData = useMemo(() => {
+    if (!nodes || nodes.length === 0) return [];
+    const kgNode = nodes.find(n => n?.data?.agentType === 'knowledge-graph');
+    const kgData = kgNode?.data?.result || kgNode?.data?.output;
+    if (!kgData?.characters) return [];
+
+    return (kgData.characters || []).map(c => {
+      // Find relationships for this character
+      const rels = (kgData.relationships || []).filter(
+        r => r.from === c.id || r.to === c.id || r.source === c.id || r.target === c.id
+      ).map(r => {
+        const otherId = (r.from === c.id || r.source === c.id) ? (r.to || r.target) : (r.from || r.source);
+        const otherChar = (kgData.characters || []).find(ch => ch.id === otherId);
+        return {
+          name: otherChar?.name || otherId,
+          type: r.type || r.label || 'related',
+        };
+      });
+
+      return {
+        id: c.id,
+        name: c.name,
+        description: c.description || '',
+        role: c.role || '',
+        traits: c.traits || [],
+        status: c.status || 'active',
+        firstAppearance: c.firstAppearance || '',
+        arc: c.arc || c.characterArc || '',
+        relationships: rels,
+      };
+    });
+  }, [nodes]);
+
+  // Character name set for fast lookup
+  const characterNameSet = useMemo(() => {
+    return new Set(characterData.map(c => c.name?.toUpperCase()).filter(Boolean));
+  }, [characterData]);
+
+  // Handle character name click
+  const handleCharacterClick = useCallback((charName, event) => {
+    const char = characterData.find(c => c.name?.toUpperCase() === charName.toUpperCase());
+    if (!char) return;
+
+    const rect = event.target.getBoundingClientRect();
+    setActiveCharacterCard({
+      character: char,
+      x: Math.min(rect.left, window.innerWidth - 320),
+      y: rect.bottom + 8,
+    });
+  }, [characterData]);
+
+  // Render line content with character names as clickable links
+  const renderLineWithCharacterLinks = useCallback((content) => {
+    if (!content || characterNameSet.size === 0) return content || '\u00A0';
+
+    // Build regex from character names
+    const names = characterData.map(c => c.name).filter(Boolean);
+    if (names.length === 0) return content;
+
+    const escapedNames = names.map(n => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+    const regex = new RegExp(`\\b(${escapedNames.join('|')})\\b`, 'gi');
+
+    const parts = content.split(regex);
+    if (parts.length <= 1) return content;
+
+    return parts.map((part, i) => {
+      const isMatch = names.some(n => n.toUpperCase() === part.toUpperCase());
+      if (isMatch) {
+        return (
+          <span
+            key={i}
+            className="character-name-link"
+            onClick={(e) => { e.stopPropagation(); handleCharacterClick(part, e); }}
+          >
+            {part}
+          </span>
+        );
+      }
+      return part;
+    });
+  }, [characterData, characterNameSet, handleCharacterClick]);
+
   // Filter out resolved problems
   const pendingProblems = useMemo(() =>
     problems.filter(p => p.status === 'pending' && !resolvedProblems.has(p.id)),
@@ -1635,6 +1989,15 @@ export default function AIEditorPage({
             >
               <Database className="w-3.5 h-3.5" />
               Neo4j
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setIsVisualizationOpen(!isVisualizationOpen)}
+              className={`h-8 gap-1 text-xs ${isVisualizationOpen ? 'bg-emerald-500/20 text-emerald-500' : ''}`}
+            >
+              <Network className="w-3.5 h-3.5" />
+              Visualize
             </Button>
             <Button variant="ghost" size="sm" onClick={() => setIsBottomPanelOpen(!isBottomPanelOpen)} className="h-8">
               {isBottomPanelOpen ? <PanelBottomClose className="w-4 h-4" /> : <PanelBottom className="w-4 h-4" />}
@@ -1905,14 +2268,38 @@ export default function AIEditorPage({
 
                   <div className="flex-1" />
 
+                  {/* Format Selector */}
+                  {!isFocusMode && (
+                    <select
+                      value={scriptFormat}
+                      onChange={(e) => setScriptFormat(e.target.value)}
+                      className="h-7 px-2 text-xs rounded border border-border bg-background text-foreground cursor-pointer hover:border-emerald-500 transition-colors"
+                      title="Script format"
+                    >
+                      <option value="screenplay">🎬 Screenplay</option>
+                      <option value="novel">📖 Novel</option>
+                      <option value="episodic">📺 Episodic</option>
+                    </select>
+                  )}
+
                   {/* Stats */}
                   {!isFocusMode && (
                     <div className="flex items-center gap-3 text-xs">
                       {pendingProblems.length > 0 && (
                         <Badge className="bg-amber-500/20 text-amber-500 border-0">
-                          {pendingProblems.length} pending changes
+                          {pendingProblems.length} issues
                         </Badge>
                       )}
+
+                      {/* Auto-Save Status */}
+                      <Badge className={`border-0 gap-1 ${autoSaveStatus === 'saved' ? 'bg-emerald-500/20 text-emerald-500' :
+                        autoSaveStatus === 'saving' ? 'bg-blue-500/20 text-blue-500' :
+                          'bg-amber-500/20 text-amber-500'
+                        }`}>
+                        {autoSaveStatus === 'saved' && <><CheckCircle className="w-3 h-3" /> Saved</>}
+                        {autoSaveStatus === 'saving' && <><RefreshCw className="w-3 h-3 animate-spin" /> Saving...</>}
+                        {autoSaveStatus === 'unsaved' && <><Clock className="w-3 h-3" /> Unsaved</>}
+                      </Badge>
                       {acceptedChanges.length > 0 && (
                         <Badge className="bg-emerald-500/20 text-emerald-500 border-0">
                           {acceptedChanges.length} accepted
@@ -1939,7 +2326,7 @@ export default function AIEditorPage({
                         <div
                           key={idx}
                           ref={(el) => { lineRefs.current[line.number] = el; }}
-                          className={`script-line ${line.type} relative group`}
+                          className={`script-line ${line.type} relative group ${FORMAT_STYLES[scriptFormat]?.[line.type] || ''}`}
                           style={{
                             backgroundColor: isSelected ? 'rgba(59, 130, 246, 0.1)' : 'transparent'
                           }}
@@ -1968,13 +2355,52 @@ export default function AIEditorPage({
                           {/* Line content */}
                           {line.hasProblem && showIssueHighlights ? (
                             <span
-                              className="issue-highlight cursor-pointer"
+                              className={`issue-highlight severity-${line.problem?.type || 'warning'} cursor-pointer`}
                               onClick={() => handleProblemClick(line.problem)}
+                              onMouseEnter={() => setHoveredIssueId(line.problem?.id)}
+                              onMouseLeave={() => setHoveredIssueId(null)}
                             >
-                              {line.content || '\u00A0'}
+                              {/* Severity dot in gutter — always visible */}
+                              <span
+                                className={`severity-dot ${ISSUE_TYPES[line.problem?.type || 'warning']?.dot || 'bg-amber-500'}`}
+                                style={{
+                                  boxShadow: `0 0 6px ${ISSUE_TYPES[line.problem?.type || 'warning']?.color || '#F59E0B'}`,
+                                  animation: 'pulse 2s infinite',
+                                }}
+                              />
+                              {renderLineWithCharacterLinks(line.content)}
+                              {/* Issue icon */}
                               <span className="absolute right-[-30px]">
-                                <AlertTriangle className="w-4 h-4 text-amber-500" />
+                                {(() => {
+                                  const IssueIcon = ISSUE_TYPES[line.problem?.type || 'warning']?.icon || AlertTriangle;
+                                  const iconColor = ISSUE_TYPES[line.problem?.type || 'warning']?.color || '#F59E0B';
+                                  return <IssueIcon className="w-4 h-4" style={{ color: iconColor }} />;
+                                })()}
                               </span>
+
+                              {/* Hover tooltip with issue details */}
+                              {hoveredIssueId === line.problem?.id && (
+                                <div className="issue-marker-tooltip">
+                                  <div className="flex items-center gap-1.5 mb-1">
+                                    <Badge variant="outline" className="text-[9px] h-4 px-1.5" style={{
+                                      borderColor: ISSUE_TYPES[line.problem?.type || 'warning']?.color,
+                                      color: ISSUE_TYPES[line.problem?.type || 'warning']?.color,
+                                    }}>
+                                      {ISSUE_TYPES[line.problem?.type || 'warning']?.label}
+                                    </Badge>
+                                    <span className="text-[10px] text-muted-foreground">{line.problem?.category}</span>
+                                  </div>
+                                  <p className="text-[11px] text-foreground font-medium mb-1">
+                                    {line.problem?.description || line.problem?.message}
+                                  </p>
+                                  {line.problem?.suggestedFix && (
+                                    <p className="text-[10px] text-emerald-500">
+                                      💡 {line.problem.suggestedFix.slice(0, 80)}{line.problem.suggestedFix.length > 80 ? '…' : ''}
+                                    </p>
+                                  )}
+                                  <p className="text-[9px] text-muted-foreground/60 mt-1">Click to view fix →</p>
+                                </div>
+                              )}
                             </span>
                           ) : line.acceptedChange ? (
                             <div className="relative py-1 px-2 -mx-2 rounded bg-emerald-500/10 border-l-4 border-emerald-500">
@@ -2117,18 +2543,39 @@ export default function AIEditorPage({
                   </Tabs>
 
                   <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                    {errorCount > 0 && (
-                      <span className="flex items-center gap-1">
-                        <XCircle className="w-3.5 h-3.5 text-red-500" />
-                        {errorCount} errors
-                      </span>
-                    )}
-                    {warningCount > 0 && (
-                      <span className="flex items-center gap-1">
-                        <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />
-                        {warningCount} warnings
-                      </span>
-                    )}
+                    {/* Severity breakdown badges */}
+                    {(() => {
+                      const counts = { critical: 0, error: 0, warning: 0, info: 0 };
+                      pendingProblems.forEach(p => { if (counts[p.type] !== undefined) counts[p.type]++; });
+                      return (
+                        <>
+                          {counts.critical > 0 && (
+                            <span className="flex items-center gap-1">
+                              <XCircle className="w-3.5 h-3.5 text-red-500" />
+                              {counts.critical}
+                            </span>
+                          )}
+                          {counts.error > 0 && (
+                            <span className="flex items-center gap-1">
+                              <XCircle className="w-3.5 h-3.5 text-orange-500" />
+                              {counts.error}
+                            </span>
+                          )}
+                          {counts.warning > 0 && (
+                            <span className="flex items-center gap-1">
+                              <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />
+                              {counts.warning}
+                            </span>
+                          )}
+                          {counts.info > 0 && (
+                            <span className="flex items-center gap-1">
+                              <Info className="w-3.5 h-3.5 text-blue-500" />
+                              {counts.info}
+                            </span>
+                          )}
+                        </>
+                      );
+                    })()}
                   </div>
                 </div>
 
@@ -2516,6 +2963,105 @@ export default function AIEditorPage({
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Character Card — Right Side Panel */}
+      {activeCharacterCard && (
+        <>
+          <div className="fixed inset-0 z-[69] bg-black/20 backdrop-blur-sm character-card-backdrop" onClick={() => setActiveCharacterCard(null)} />
+          <div
+            className="fixed right-0 top-0 h-full w-80 bg-background border-l border-border z-[70] p-6 overflow-y-auto shadow-lg animate-in slide-in-from-right-10 duration-300 character-card-panel"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-12 h-12 rounded-full bg-violet-500/20 border-2 border-violet-500/30 flex items-center justify-center text-xl shrink-0">
+                👤
+              </div>
+              <div className="flex-1 min-w-0">
+                <h4 className="text-base font-bold text-foreground truncate">{activeCharacterCard.character.name}</h4>
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  {activeCharacterCard.character.role && (
+                    <Badge variant="outline" className="text-[10px] h-5 border-violet-500/40 text-violet-500">
+                      {activeCharacterCard.character.role}
+                    </Badge>
+                  )}
+                  <Badge variant="outline" className={`text-[10px] h-5 ${activeCharacterCard.character.status === 'active' ? 'border-emerald-500/40 text-emerald-500' :
+                      activeCharacterCard.character.status === 'deceased' ? 'border-red-500/40 text-red-500' :
+                        'border-muted-foreground/40 text-muted-foreground'
+                    }`}>
+                    {activeCharacterCard.character.status}
+                  </Badge>
+                </div>
+              </div>
+              <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={() => setActiveCharacterCard(null)}>
+                <X className="w-4 h-4" />
+              </Button>
+            </div>
+
+            {/* Description */}
+            {activeCharacterCard.character.description && (
+              <div className="mb-3 p-3 rounded-lg bg-muted/40">
+                <p className="text-[12px] text-muted-foreground leading-relaxed">
+                  {activeCharacterCard.character.description}
+                </p>
+              </div>
+            )}
+
+            {/* Traits */}
+            {activeCharacterCard.character.traits?.length > 0 && (
+              <div className="mb-3">
+                <p className="text-[10px] font-semibold text-muted-foreground/70 uppercase tracking-wider mb-1.5">Traits</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {activeCharacterCard.character.traits.slice(0, 8).map((trait, i) => (
+                    <Badge key={i} variant="secondary" className="text-[10px] h-5 bg-muted">
+                      {trait}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Relationships */}
+            {activeCharacterCard.character.relationships?.length > 0 && (
+              <div className="mb-3">
+                <p className="text-[10px] font-semibold text-muted-foreground/70 uppercase tracking-wider mb-1.5">Relationships</p>
+                <div className="space-y-1 max-h-28 overflow-y-auto pr-1">
+                  {activeCharacterCard.character.relationships.slice(0, 8).map((rel, i) => (
+                    <div key={i} className="flex items-center gap-2 text-[11px] p-1.5 rounded bg-muted/20">
+                      <span className="text-violet-400 font-bold">→</span>
+                      <Badge variant="outline" className="text-[9px] h-4 shrink-0">{rel.type}</Badge>
+                      <span className="font-medium text-foreground truncate">{rel.name}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Arc */}
+            {activeCharacterCard.character.arc && (
+              <div className="pt-3 border-t border-border">
+                <p className="text-[10px] font-semibold text-muted-foreground/70 uppercase tracking-wider mb-1">Character Arc</p>
+                <p className="text-[11px] text-muted-foreground leading-relaxed">{activeCharacterCard.character.arc}</p>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
+      {/* Story Visualization Overlay */}
+      {isVisualizationOpen && (
+        <div className="fixed inset-0 z-[60] bg-background/80 backdrop-blur-sm flex items-center justify-center p-8">
+          <div className="w-full max-w-5xl h-[80vh] animate-in zoom-in-95">
+            <StoryVisualization
+              workflowId={workflow?._id || workflow?.id}
+              graphData={vizGraphData}
+              timelineData={vizTimelineData}
+              isOpen={true}
+              onClose={() => setIsVisualizationOpen(false)}
+            />
+          </div>
+        </div>
+      )}
     </>
   );
 }

@@ -703,6 +703,20 @@ This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) 
 
 ---
 
+## Recent Features (Script Editor)
+
+| Feature | Description |
+|---------|-------------|
+| 🚨 **Smart Alerting** | Severity-based issue detection (Critical/Error/Warning/Info) with color-coded badges |
+| 📝 **Multi-Format Support** | Screenplay, Novel, and Episodic formatting with live syntax highlighting |
+| 🧠 **Style Learning** | Persistent writing style profiles — genre, tone, pacing, voice preferences saved across sessions |
+| 📊 **Visual Story Tools** | Interactive relationship graph (type-clustered) + chronological timeline with chapter markers |
+| 💾 **Debounced Auto-Save** | Automatic saves every 30 seconds with visual status indicator (Saved/Saving/Unsaved) |
+| 🔍 **Inline Editor Markers** | Hover tooltips above issue lines with severity badge, description, and suggested fix preview |
+| 👤 **Character Quick Reference** | Click character names in the script to open a detailed side panel with traits, relationships, and arc |
+
+---
+
 ## Roadmap
 
 ### In Development
