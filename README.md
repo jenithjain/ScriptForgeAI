@@ -11,8 +11,11 @@
 [![Gemini AI](https://img.shields.io/badge/Gemini-2.0_Flash_+_2.5_Pro-4285F4?style=for-the-badge&logo=google)](https://ai.google.dev/)
 [![Neo4j](https://img.shields.io/badge/Neo4j-Aura-008CC1?style=for-the-badge&logo=neo4j)](https://neo4j.com/)
 [![MongoDB](https://img.shields.io/badge/MongoDB-Atlas-47A248?style=for-the-badge&logo=mongodb)](https://www.mongodb.com/)
+[![Deployed on Vercel](https://img.shields.io/badge/Deployed-Vercel-black?style=for-the-badge&logo=vercel)](https://scriptforge-ai-plum.vercel.app)
 
 **7 Specialized AI Agents | Vercel AI SDK Framework | Production Logging | Visual Workflow Builder | Graph-Based Memory**
+
+🌐 **Live Demo**: [https://scriptforge-ai-plum.vercel.app](https://scriptforge-ai-plum.vercel.app)
 
 [Features](#key-features) • [Quick Start](#quick-start) • [Architecture](#system-architecture) • [API Docs](#api-documentation) • [Contributing](#contributing)
 
@@ -339,6 +342,7 @@ graph LR
 | **Logging** | Custom production logging system with JSON output and file rotation |
 | **Visualization** | React Flow 11, Three.js, Force Graph 3D, Recharts |
 | **Auth** | NextAuth.js with bcrypt password hashing |
+| **Encryption** | AES-256-GCM per-user API key encryption at rest |
 | **PDF Generation** | pdf-lib (WinAnsi encoding compatible) |
 | **UI Components** | Radix UI, Lucide Icons, Framer Motion |
 | **State** | Zustand for client state management |
@@ -408,8 +412,11 @@ npm install
 
 Create `.env.local` file:
 ```env
-# Google Gemini AI (required)
-GOOGLE_GEMINI_API_KEY=your_gemini_api_key
+# Google Gemini AI (optional — users provide their own key via UI)
+# GOOGLE_GEMINI_API_KEY=your_gemini_api_key
+
+# Encryption secret for user API keys (required, 32+ chars)
+API_KEY_ENCRYPTION_SECRET=generate_a_random_32_char_string
 
 # MongoDB (required)
 MONGODB_URI=***************************************
@@ -696,10 +703,23 @@ This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) 
 ## Acknowledgments
 
 - **Google AI** for Gemini 2.0 Flash/2.5 Pro and Veo 3 APIs
-- **Vercel** for AI SDK framework and deployment platform
+- **Vercel** for AI SDK framework and [production deployment](https://scriptforge-ai-plum.vercel.app)
 - **Neo4j** for graph database technology
 - **React Flow** for the visual workflow library
 - **Open Source Community** for invaluable tools and libraries
+
+---
+
+## Recent Features (Per-User API Key Encryption)
+
+| Feature | Description |
+|---------|-------------|
+| 🔐 **AES-256-GCM Encryption** | User Gemini API keys encrypted at rest in MongoDB using AES-256-GCM with unique IV per key |
+| 🔑 **Bring Your Own Key** | No server-level Gemini key required — each user provides their own API key via a secure modal |
+| 🛡️ **API Key Provider** | React context (`ApiKeyProvider`) with `ensureKey()` guard — prompts users before any AI operation |
+| 🗄️ **Secure Storage** | Keys stored as `{ iv, encryptedData, tag }` in the User document — never exposed in plaintext |
+| 🔄 **Per-Request Injection** | All 10+ API routes fetch & decrypt the user's key at request time — zero shared keys |
+| ❌ **Key Management** | Users can add, update, or delete their API key from the UI at any time |
 
 ---
 
