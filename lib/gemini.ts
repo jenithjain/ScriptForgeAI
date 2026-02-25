@@ -16,9 +16,8 @@ export function getGeminiClient(apiKey?: string): GoogleGenerativeAI {
     return new GoogleGenerativeAI(apiKey);
   }
   if (!ENV_API_KEY) {
-    throw new Error(
-      'No Gemini API key available. Provide a per-user key or set GOOGLE_GEMINI_API_KEY in environment variables.'
-    );
+    console.warn('[gemini] No GOOGLE_GEMINI_API_KEY env var set. Per-user keys required.');
+    return new GoogleGenerativeAI('MISSING_KEY');
   }
   if (!_defaultClient) {
     _defaultClient = new GoogleGenerativeAI(ENV_API_KEY);

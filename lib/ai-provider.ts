@@ -34,9 +34,11 @@ export function getGoogleProvider(apiKey?: string) {
     return createGoogleGenerativeAI({ apiKey });
   }
   if (!ENV_API_KEY) {
-    throw new Error(
-      'No Gemini API key available. Provide a per-user key or set GOOGLE_GEMINI_API_KEY in environment variables.'
-    );
+    // Return a provider with a placeholder key.
+    // It won't crash at import time — the error surfaces at actual API call time,
+    // which is correct since per-user keys are injected at request time.
+    console.warn('[ai-provider] No GOOGLE_GEMINI_API_KEY env var set. Per-user keys required.');
+    return createGoogleGenerativeAI({ apiKey: 'MISSING_KEY' });
   }
   if (!_defaultProvider) {
     _defaultProvider = createGoogleGenerativeAI({ apiKey: ENV_API_KEY });
