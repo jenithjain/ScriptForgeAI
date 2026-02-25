@@ -2,6 +2,7 @@
 
 import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
+import { useApiKeyContext } from "@/components/ApiKeyProvider";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -38,6 +39,7 @@ const DOCUMENT_EXTENSIONS = ['.pdf', '.docx', '.txt', '.md', '.rtf', '.csv', '.j
 
 export default function CreateWorkflowPage() {
   const router = useRouter();
+  const { ensureKey } = useApiKeyContext();
   const fileInputRef = useRef(null);
   const [brief, setBrief] = useState('');
   const [inputs, setInputs] = useState([]);
@@ -208,6 +210,8 @@ export default function CreateWorkflowPage() {
   };
 
   const handleGenerateWorkflow = async () => {
+    if (!ensureKey()) return;
+
     if (!brief.trim()) {
       toast.error('Please describe your workflow');
       return;
