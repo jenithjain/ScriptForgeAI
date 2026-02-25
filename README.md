@@ -23,7 +23,7 @@
 
 </div>
 
-## Live Link : https://riptforge-ai-plum.vercel.app
+## Live Link : https://scriptforge-ai-plum.vercel.app
 ## Demo Video
 
 
