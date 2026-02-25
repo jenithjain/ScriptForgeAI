@@ -187,7 +187,7 @@ async function executeStoryIntelligence(
   const { object, success, error } = await safeGenerateObject(
     PROMPTS.storyIntelligence(context),
     StoryContextSchema,
-    { model: 'flash', timeout: AGENT_TIMEOUT, maxRetries: MAX_RETRIES }
+    { model: 'flash', timeout: AGENT_TIMEOUT, maxRetries: MAX_RETRIES, apiKey: context.apiKey }
   );
 
   if (!success || !object) {
@@ -238,7 +238,7 @@ async function executeKnowledgeGraph(
   const { object, success, error } = await safeGenerateObject(
     PROMPTS.knowledgeGraph(context),
     KnowledgeGraphSchema,
-    { model: 'pro', timeout: AGENT_TIMEOUT, maxRetries: MAX_RETRIES, maxTokens: 32768 }
+    { model: 'pro', timeout: AGENT_TIMEOUT, maxRetries: MAX_RETRIES, maxTokens: 32768, apiKey: context.apiKey }
   );
 
   if (!success || !object) {
@@ -376,7 +376,7 @@ async function executeTemporalReasoning(
   const { object, success, error } = await safeGenerateObject(
     PROMPTS.temporalReasoning(context),
     TimelineSchema,
-    { model: 'flash', timeout: AGENT_TIMEOUT, maxRetries: MAX_RETRIES }
+    { model: 'flash', timeout: AGENT_TIMEOUT, maxRetries: MAX_RETRIES, apiKey: context.apiKey }
   );
 
   if (!success || !object) {
@@ -446,7 +446,7 @@ async function executeContinuityValidator(
   const { object, success, error } = await safeGenerateObject(
     PROMPTS.continuityValidator(context),
     ContinuityReportSchema,
-    { model: 'flash', timeout: AGENT_TIMEOUT, maxRetries: MAX_RETRIES }
+    { model: 'flash', timeout: AGENT_TIMEOUT, maxRetries: MAX_RETRIES, apiKey: context.apiKey }
   );
 
   if (!success || !object) {
@@ -497,7 +497,7 @@ async function executeCreativeCoAuthor(
   const { object, success, error } = await safeGenerateObject(
     PROMPTS.creativeCoAuthor(context),
     CreativeSuggestionsSchema,
-    { model: 'flash', timeout: AGENT_TIMEOUT, maxRetries: MAX_RETRIES }
+    { model: 'flash', timeout: AGENT_TIMEOUT, maxRetries: MAX_RETRIES, apiKey: context.apiKey }
   );
 
   if (!success || !object) {
@@ -564,7 +564,7 @@ Generate 5 specific, useful questions about the story.`;
   const { object: queries, success: queriesSuccess } = await safeGenerateObject(
     queryPrompt,
     QueriesSchema,
-    { model: 'flash', timeout: 60000, maxRetries: 2 }
+    { model: 'flash', timeout: 60000, maxRetries: 2, apiKey: context.apiKey }
   );
 
   const questionList = queriesSuccess && queries ? queries : [
@@ -594,7 +594,7 @@ Provide a comprehensive answer with references from the story.`;
     const { object: answer, success } = await safeGenerateObject(
       answerPrompt,
       RecallAnswerSchema,
-      { model: 'flash', timeout: 60000, maxRetries: 2 }
+      { model: 'flash', timeout: 60000, maxRetries: 2, apiKey: context.apiKey }
     );
 
     if (success && answer) {
@@ -683,7 +683,7 @@ Make the visual prompts detailed enough for AI video generation (50-100 words ea
   const { object: teaser, success, error } = await safeGenerateObject(
     prompt,
     TeaserSchema,
-    { model: 'flash', timeout: AGENT_TIMEOUT, maxRetries: MAX_RETRIES }
+    { model: 'flash', timeout: AGENT_TIMEOUT, maxRetries: MAX_RETRIES, apiKey: context.apiKey }
   );
 
   if (!success || !teaser) {

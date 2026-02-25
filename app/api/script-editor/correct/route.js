@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-options';
 import { safeGenerateObject, z } from '@/lib/ai-provider';
+import { getUserGeminiKey } from '@/lib/api-key-utils';
 
 export async function POST(request) {
   try {
@@ -42,10 +43,11 @@ HANDLING CONSISTENCY ISSUES:
 Issue: ${issue}
 Text: ${text}`;
 
+    const apiKey = await getUserGeminiKey(session);
     const { object, success, error } = await safeGenerateObject(
       prompt,
       CorrectionSchema,
-      { model: 'flash', temperature: 0.0, timeout: 120000 }
+      { model: 'flash', temperature: 0.0, timeout: 120000, apiKey }
     );
 
     if (!success || !object) {

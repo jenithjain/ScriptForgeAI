@@ -1,14 +1,37 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
 // Standardize API key - check both possible env var names
-const GEMINI_API_KEY = process.env.GOOGLE_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
+const ENV_API_KEY = process.env.GOOGLE_GEMINI_API_KEY || process.env.GEMINI_API_KEY || '';
 
-if (!GEMINI_API_KEY) {
-  throw new Error('GEMINI_API_KEY or GOOGLE_GEMINI_API_KEY is not defined in environment variables');
+// Singleton for backward-compatibility (uses env var)
+let _defaultClient: GoogleGenerativeAI | null = null;
+
+/**
+ * Get or create a GoogleGenerativeAI client.
+ * If apiKey is provided, a fresh per-user client is returned.
+ * Otherwise falls back to the env-var singleton.
+ */
+export function getGeminiClient(apiKey?: string): GoogleGenerativeAI {
+  if (apiKey) {
+    return new GoogleGenerativeAI(apiKey);
+  }
+  if (!ENV_API_KEY) {
+    throw new Error(
+      'No Gemini API key available. Provide a per-user key or set GOOGLE_GEMINI_API_KEY in environment variables.'
+    );
+  }
+  if (!_defaultClient) {
+    _defaultClient = new GoogleGenerativeAI(ENV_API_KEY);
+  }
+  return _defaultClient;
 }
 
-// Initialize the Gemini API client
-const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+// Legacy alias kept so `import genAI from '@/lib/gemini'` still works
+const genAI = new Proxy({} as GoogleGenerativeAI, {
+  get(_target, prop, receiver) {
+    return Reflect.get(getGeminiClient(), prop, receiver);
+  },
+});
 
 // Default timeout for Gemini API calls (120 seconds for complex agents)
 const DEFAULT_GEMINI_TIMEOUT_MS = 120000;
@@ -30,9 +53,9 @@ function withTimeout<T>(
 }
 
 // Reasoning/strategy: Gemini 2.5 Flash for general tasks
-export const getReasoningModel = (timeoutMs: number = DEFAULT_GEMINI_TIMEOUT_MS) => {
+export const getReasoningModel = (timeoutMs: number = DEFAULT_GEMINI_TIMEOUT_MS, apiKey?: string) => {
   console.log(`[Gemini] Creating Reasoning Model with timeout: ${timeoutMs}ms`);
-  return genAI.getGenerativeModel(
+  return getGeminiClient(apiKey).getGenerativeModel(
     {
       model: 'gemini-2.5-flash',
       generationConfig: {
@@ -46,8 +69,8 @@ export const getReasoningModel = (timeoutMs: number = DEFAULT_GEMINI_TIMEOUT_MS)
 };
 
 // General text: Gemini 2.5 Flash
-export const getFlashModel = (timeoutMs: number = DEFAULT_GEMINI_TIMEOUT_MS) => {
-  return genAI.getGenerativeModel(
+export const getFlashModel = (timeoutMs: number = DEFAULT_GEMINI_TIMEOUT_MS, apiKey?: string) => {
+  return getGeminiClient(apiKey).getGenerativeModel(
     {
       model: 'gemini-2.5-flash',
       generationConfig: {
@@ -61,9 +84,9 @@ export const getFlashModel = (timeoutMs: number = DEFAULT_GEMINI_TIMEOUT_MS) => 
 };
 
 // Knowledge Graph Model: Gemini 2.5 Pro for complex reasoning with higher token limits
-export const getKnowledgeGraphModel = (timeoutMs: number = DEFAULT_GEMINI_TIMEOUT_MS) => {
+export const getKnowledgeGraphModel = (timeoutMs: number = DEFAULT_GEMINI_TIMEOUT_MS, apiKey?: string) => {
   console.log(`[Gemini] Creating Knowledge Graph Model with timeout: ${timeoutMs}ms`);
-  return genAI.getGenerativeModel(
+  return getGeminiClient(apiKey).getGenerativeModel(
     {
       model: 'gemini-2.5-pro',
       generationConfig: {
@@ -77,8 +100,8 @@ export const getKnowledgeGraphModel = (timeoutMs: number = DEFAULT_GEMINI_TIMEOU
 };
 
 // Image generation: Gemini 2.5 Flash Image (returns base64 images)
-export const getImageModel = (timeoutMs: number = DEFAULT_GEMINI_TIMEOUT_MS) => {
-  return genAI.getGenerativeModel(
+export const getImageModel = (timeoutMs: number = DEFAULT_GEMINI_TIMEOUT_MS, apiKey?: string) => {
+  return getGeminiClient(apiKey).getGenerativeModel(
     {
       model: 'gemini-2.5-flash-image',
       generationConfig: {
@@ -95,9 +118,10 @@ export const getImageModel = (timeoutMs: number = DEFAULT_GEMINI_TIMEOUT_MS) => 
 export const getCustomModel = (
   modelName: string = 'gemini-2.5-flash',
   generationConfig: Record<string, any> = {},
-  timeoutMs: number = DEFAULT_GEMINI_TIMEOUT_MS
+  timeoutMs: number = DEFAULT_GEMINI_TIMEOUT_MS,
+  apiKey?: string
 ) => {
-  return genAI.getGenerativeModel(
+  return getGeminiClient(apiKey).getGenerativeModel(
     {
       model: modelName,
       generationConfig: {

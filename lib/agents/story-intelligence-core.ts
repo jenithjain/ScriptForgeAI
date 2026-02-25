@@ -325,9 +325,10 @@ export async function analyzeManuscript(
   text: string,
   chapterNumber: number,
   existingContext?: GlobalContext,
-  workflowId?: string
+  workflowId?: string,
+  apiKey?: string | null
 ): Promise<StoryAnalysisResult> {
-  const model = getFlashModel();
+  const model = getFlashModel(undefined, apiKey ?? undefined);
   const ctxManager = getContextManager(workflowId);
   const context = existingContext || ctxManager.getGlobalContext();
 

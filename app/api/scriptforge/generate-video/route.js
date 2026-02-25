@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-options';
+import { getUserGeminiKey } from '@/lib/api-key-utils';
 import { writeFile, mkdir } from 'fs/promises';
 import path from 'path';
 import dbConnect from '@/lib/mongodb';
@@ -157,12 +158,12 @@ export async function POST(request) {
     console.log('Config:', { aspectRatio, resolution, duration: validDuration });
     console.log('Project:', { workflowId, projectName, sceneName, promptIndex });
 
-    const GEMINI_API_KEY = process.env.GOOGLE_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
+    const GEMINI_API_KEY = await getUserGeminiKey(session);
 
     if (!GEMINI_API_KEY) {
       return NextResponse.json(
-        { error: 'Gemini API key not configured' },
-        { status: 500 }
+        { error: 'No Gemini API key available. Please add your API key in Settings.' },
+        { status: 400 }
       );
     }
 
@@ -386,10 +387,10 @@ export async function GET(request) {
       });
     }
 
-    const GEMINI_API_KEY = process.env.GOOGLE_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
+    const GEMINI_API_KEY = await getUserGeminiKey(session);
 
     if (!GEMINI_API_KEY) {
-      return NextResponse.json({ error: 'API key not configured' }, { status: 500 });
+      return NextResponse.json({ error: 'No Gemini API key available. Please add your API key in Settings.' }, { status: 400 });
     }
 
     // Poll operation status using REST API directly

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-options';
 import { getReasoningModel, generateWithRetry, parseJSONFromResponse } from '@/lib/gemini';
+import { getUserGeminiKey } from '@/lib/api-key-utils';
 import dbConnect from '@/lib/mongodb';
 import ScriptWorkflow from '@/lib/models/ScriptWorkflow';
 
@@ -41,7 +42,7 @@ Format your response as a well-structured narrative text (2-3 paragraphs) that e
 
 Return ONLY the strategy text, no JSON formatting needed.`;
 
-    const model = getReasoningModel();
+    const model = getReasoningModel(undefined, await getUserGeminiKey(session));
     const strategyText = await generateWithRetry(model, prompt, 3);
     
     // Save strategy to workflow if workflowId provided

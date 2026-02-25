@@ -3,7 +3,8 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-options';
 import connectDB from '@/lib/mongodb';
 import ScriptWorkflow from '@/lib/models/ScriptWorkflow';
-import { scriptForgeAI } from '@/lib/scriptforge-ai';
+import { createScriptForgeAI } from '@/lib/scriptforge-ai';
+import { getUserGeminiKey } from '@/lib/api-key-utils';
 
 export async function POST(req) {
   try {
@@ -27,6 +28,10 @@ export async function POST(req) {
         { status: 400 }
       );
     }
+
+    // Get user's personal API key (falls back to env var)
+    const apiKey = await getUserGeminiKey(session);
+    const scriptForgeAI = createScriptForgeAI(apiKey);
 
     // Generate workflow using Gemini
     const { workflow, reasoning } = await scriptForgeAI.generateWorkflow(

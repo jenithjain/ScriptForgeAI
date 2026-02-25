@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
 import StaggeredMenu from "@/components/StaggeredMenu";
+import ApiKeyProvider from "@/components/ApiKeyProvider";
 
 export default function DashboardLayout({ children }) {
   const [menuBtnColor, setMenuBtnColor] = useState('#000000');
@@ -54,7 +55,9 @@ export default function DashboardLayout({ children }) {
 
       {/* Main Content */}
       <main className="pt-20">
-        {children}
+        <ApiKeyProvider>
+          {children}
+        </ApiKeyProvider>
       </main>
     </>
   );

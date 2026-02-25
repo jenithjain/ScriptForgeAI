@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-options';
+import { getUserGeminiKey } from '@/lib/api-key-utils';
 import connectDB from '@/lib/mongodb';
 import ScriptWorkflow from '@/lib/models/ScriptWorkflow';
 import { AGENT_DEFINITIONS } from '@/lib/agents/definitions';
@@ -17,7 +18,7 @@ function deepClone(obj) {
 /**
  * Execute a single agent within a workflow
  */
-async function executeSingleAgent(workflow, nodeId, agentType, customPrompt = null) {
+async function executeSingleAgent(workflow, nodeId, agentType, customPrompt = null, apiKey = null) {
   try {
     // Deep clone nodes to ensure Mongoose detects changes
     let nodesClone = deepClone(workflow.nodes);
@@ -39,6 +40,7 @@ async function executeSingleAgent(workflow, nodeId, agentType, customPrompt = nu
       previousResults: {},
       customPrompt: customPrompt || node.data.customPrompt || null,
       workflowId: workflow._id.toString(),
+      apiKey: apiKey || undefined,
     };
 
     // Collect results from previously executed agents
@@ -189,9 +191,12 @@ export async function POST(req) {
       );
     }
 
+    // Get user's personal API key (falls back to env var)
+    const apiKey = await getUserGeminiKey(session);
+
     // Handle single agent execution
     if (singleAgentId) {
-      return await executeSingleAgent(workflow, singleAgentId, requestedAgentType, customPrompt);
+      return await executeSingleAgent(workflow, singleAgentId, requestedAgentType, customPrompt, apiKey);
     }
 
     // Full workflow execution
@@ -221,6 +226,7 @@ export async function POST(req) {
       manuscript: workflow.inputs?.manuscript || workflow.inputs?.fullText || '',
       previousResults: {},
       workflowId: workflow._id.toString(),
+      apiKey: apiKey || undefined,
     };
 
     for (let i = 0; i < nodesClone.length; i++) {

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-options';
 import { getFlashModel } from '@/lib/gemini';
+import { getUserGeminiKey } from '@/lib/api-key-utils';
 import { runQuery } from '@/lib/neo4j';
 
 /**
@@ -48,23 +49,26 @@ export async function POST(request) {
     // Query knowledge graph for story context
     const storyContext = await getStoryContext(documentId);
 
+    // Get user's personal API key (falls back to env var)
+    const apiKey = await getUserGeminiKey(session);
+
     // Generate suggestions based on intent
     let suggestions;
     switch (intent) {
       case 'scene':
-        suggestions = await generateSceneSuggestions(currentSceneText, storyContext);
+        suggestions = await generateSceneSuggestions(currentSceneText, storyContext, apiKey);
         break;
       case 'dialogue':
-        suggestions = await generateDialogueSuggestions(currentSceneText, storyContext);
+        suggestions = await generateDialogueSuggestions(currentSceneText, storyContext, apiKey);
         break;
       case 'plot':
-        suggestions = await generatePlotSuggestions(currentSceneText, storyContext);
+        suggestions = await generatePlotSuggestions(currentSceneText, storyContext, apiKey);
         break;
       case 'character':
-        suggestions = await generateCharacterSuggestions(currentSceneText, storyContext);
+        suggestions = await generateCharacterSuggestions(currentSceneText, storyContext, apiKey);
         break;
       case 'theme':
-        suggestions = await generateThemeSuggestions(currentSceneText, storyContext);
+        suggestions = await generateThemeSuggestions(currentSceneText, storyContext, apiKey);
         break;
     }
 
@@ -172,8 +176,8 @@ async function getStoryContext(documentId) {
 /**
  * Generate scene suggestions with video prompts
  */
-async function generateSceneSuggestions(sceneText, storyContext) {
-  const model = getFlashModel();
+async function generateSceneSuggestions(sceneText, storyContext, apiKey) {
+  const model = getFlashModel(undefined, apiKey);
 
   const characterList = storyContext.characters.map(c => 
     `${c.name} (${c.role || 'character'})${c.traits ? ` - traits: ${Array.isArray(c.traits) ? c.traits.join(', ') : c.traits}` : ''}`
@@ -268,8 +272,8 @@ Return ONLY valid JSON in this exact format:
 /**
  * Generate dialogue enhancement suggestions
  */
-async function generateDialogueSuggestions(sceneText, storyContext) {
-  const model = getFlashModel();
+async function generateDialogueSuggestions(sceneText, storyContext, apiKey) {
+  const model = getFlashModel(undefined, apiKey);
 
   const characterDetails = storyContext.characters.map(c => 
     `${c.name}: Role: ${c.role || 'unknown'}, Traits: ${Array.isArray(c.traits) ? c.traits.join(', ') : (c.traits || 'unknown')}, Description: ${c.description || 'Not detailed'}`
@@ -343,8 +347,8 @@ Return ONLY valid JSON:
 /**
  * Generate character arc suggestions
  */
-async function generateCharacterSuggestions(sceneText, storyContext) {
-  const model = getFlashModel();
+async function generateCharacterSuggestions(sceneText, storyContext, apiKey) {
+  const model = getFlashModel(undefined, apiKey);
 
   const characterDetails = storyContext.characters.map(c => 
     `${c.name}: Role: ${c.role}, Traits: ${Array.isArray(c.traits) ? c.traits.join(', ') : (c.traits || 'unknown')}, Motivations: ${Array.isArray(c.motivations) ? c.motivations.join(', ') : (c.motivations || 'unknown')}`
@@ -412,8 +416,8 @@ Return ONLY valid JSON:
 /**
  * Generate plot development suggestions
  */
-async function generatePlotSuggestions(sceneText, storyContext) {
-  const model = getFlashModel();
+async function generatePlotSuggestions(sceneText, storyContext, apiKey) {
+  const model = getFlashModel(undefined, apiKey);
 
   const plotThreads = storyContext.plotThreads.map(p => 
     `${p.name}: Status: ${p.status || 'active'}, Description: ${p.description || 'No details'}`
@@ -480,8 +484,8 @@ Return ONLY valid JSON:
 /**
  * Generate theme suggestions
  */
-async function generateThemeSuggestions(sceneText, storyContext) {
-  const model = getFlashModel();
+async function generateThemeSuggestions(sceneText, storyContext, apiKey) {
+  const model = getFlashModel(undefined, apiKey);
 
   const prompt = `You are a thematic analysis specialist for screenwriting.
 

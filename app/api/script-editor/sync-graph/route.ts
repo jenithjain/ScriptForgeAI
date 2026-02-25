@@ -1,10 +1,14 @@
 
 import { NextRequest, NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth-options';
 import { analyzeManuscript } from '@/lib/agents/story-intelligence-core';
 import { updateGraph, initializeGraphSchema } from '@/lib/agents/story-knowledge-graph';
+import { getUserGeminiKey } from '@/lib/api-key-utils';
 
 export async function POST(request: NextRequest) {
   try {
+    const session = await getServerSession(authOptions);
     const { text, workflowId, chapterNumber = 1, replaceGraph = false } = await request.json();
 
     if (!text || !workflowId) {
@@ -15,7 +19,8 @@ export async function POST(request: NextRequest) {
     }
 
     // 1. Analyze the new text using Gemini to extract graph elements
-    const analysis = await analyzeManuscript(text, chapterNumber);
+    const apiKey = await getUserGeminiKey(session);
+    const analysis = await analyzeManuscript(text, chapterNumber, undefined, undefined, apiKey);
 
     // Attach workflowId to analysis for database storage
     analysis.workflowId = workflowId;

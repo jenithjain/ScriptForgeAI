@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
 import StaggeredMenu from "@/components/StaggeredMenu";
+import ApiKeyProvider from "@/components/ApiKeyProvider";
 
 export default function WorkflowsLayout({ children }) {
   const [menuBtnColor, setMenuBtnColor] = useState('#000000');
@@ -35,7 +36,7 @@ export default function WorkflowsLayout({ children }) {
 
   // If on workflow canvas, render only children without navbar
   if (isWorkflowCanvasPage) {
-    return <main className="h-screen w-screen overflow-hidden">{children}</main>;
+    return <main className="h-screen w-screen overflow-hidden"><ApiKeyProvider>{children}</ApiKeyProvider></main>;
   }
 
   return (
@@ -65,7 +66,9 @@ export default function WorkflowsLayout({ children }) {
 
       {/* Main Content */}
       <main>
-        {children}
+        <ApiKeyProvider>
+          {children}
+        </ApiKeyProvider>
       </main>
     </>
   );

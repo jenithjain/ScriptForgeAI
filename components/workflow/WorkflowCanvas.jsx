@@ -26,6 +26,7 @@ import AgentIcon from './AgentIcon';
 import ManuscriptInputModal from './ManuscriptInputModal';
 import ScriptEditorPanel from './ScriptEditorPanel';
 import AIEditorPage from './AIEditorPage';
+import { useApiKeyContext } from '@/components/ApiKeyProvider';
 import { AGENT_DEFINITIONS } from '@/lib/agents/definitions';
 import {
   ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Play, Settings,
@@ -80,6 +81,7 @@ export default function WorkflowCanvas({
   onUpdateEdges,
   onRefresh
 }) {
+  const { ensureKey } = useApiKeyContext();
   const [nodes, setNodes, onNodesChange] = useNodesState(workflow?.nodes || []);
   const [edges, setEdges, onEdgesChange] = useEdgesState(workflow?.edges || []);
   const [selectedNode, setSelectedNode] = useState(null);
@@ -375,6 +377,8 @@ export default function WorkflowCanvas({
 
   // Function to execute a single agent
   const executeAgentById = useCallback(async (nodeId, agentType, keepModalOpen = false, customPrompt = null) => {
+    if (!ensureKey()) return;
+
     if (executingNodeId) {
       toast.error('Another agent is already running');
       return;
@@ -609,6 +613,8 @@ export default function WorkflowCanvas({
   };
 
   const handleExecute = async () => {
+    if (!ensureKey()) return;
+
     setIsExecuting(true);
 
     // Initialize progress

@@ -21,6 +21,7 @@ export interface AgentContext {
   previousResults: Record<string, any>;
   customPrompt?: string | null; // User-provided custom prompt override
   workflowId?: string; // Workflow ID for Neo4j storage
+  apiKey?: string; // Per-user Gemini API key (decrypted)
 }
 
 export interface StoryContext {
@@ -266,14 +267,14 @@ export async function executeAgent(
     }
   }
   
-  const model = getReasoningModel();
+  const model = getReasoningModel(undefined, context.apiKey);
   
   switch (agentType) {
     case 'story-intelligence':
       return executeStoryIntelligence(model, context);
     case 'knowledge-graph':
       // Use dedicated Gemini 2.5 Pro model with higher token limits for comprehensive graph extraction
-      const kgModel = getKnowledgeGraphModel();
+      const kgModel = getKnowledgeGraphModel(undefined, context.apiKey);
       return executeKnowledgeGraph(kgModel, context);
     case 'temporal-reasoning':
       return executeTemporalReasoning(model, context);

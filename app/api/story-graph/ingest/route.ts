@@ -9,6 +9,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-options';
 import { analyzeManuscript, getGlobalContext } from '@/lib/agents/story-intelligence-core';
 import { updateGraph, initializeGraphSchema } from '@/lib/agents/story-knowledge-graph';
+import { getUserGeminiKey } from '@/lib/api-key-utils';
 
 export async function POST(request: NextRequest) {
   try {
@@ -39,7 +40,8 @@ export async function POST(request: NextRequest) {
 
     // Analyze the manuscript text
     console.log(`Analyzing manuscript chapter ${chapterNumber}...`);
-    const analysis = await analyzeManuscript(text, chapterNumber, existingContext);
+    const apiKey = await getUserGeminiKey(session);
+    const analysis = await analyzeManuscript(text, chapterNumber, existingContext, undefined, apiKey);
 
     // Store in Neo4j if requested
     let graphUpdateResult: { success: boolean; message: string } | null = null;

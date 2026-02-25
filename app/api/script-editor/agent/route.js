@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-options';
 import { safeGenerateObject, z } from '@/lib/ai-provider';
+import { getUserGeminiKey } from '@/lib/api-key-utils';
 
 export async function POST(request) {
   try {
@@ -51,10 +52,13 @@ SCRIPT CONTENT:
 ${scriptContent}
 """`;
 
+    // Get user's personal API key (falls back to env var)
+    const apiKey = await getUserGeminiKey(session);
+
     const { object, success, error } = await safeGenerateObject(
       prompt,
       AgentResponseSchema,
-      { model: 'flash', temperature: 0.7, timeout: 120000 }
+      { model: 'flash', temperature: 0.7, timeout: 120000, apiKey }
     );
 
     if (!success || !object) {

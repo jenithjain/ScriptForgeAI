@@ -12,10 +12,12 @@ import { getFlashModel } from './gemini';
 
 export class ScriptForgeAIService {
   private model: GenerativeModel;
+  private apiKey?: string;
 
-  constructor() {
+  constructor(apiKey?: string) {
     // Use the shared model getter with 120-second timeout configured
-    this.model = getFlashModel();
+    this.model = getFlashModel(undefined, apiKey);
+    this.apiKey = apiKey;
   }
 
   async generateWorkflow(request: GenerateWorkflowRequest, userId: string): Promise<GenerateWorkflowResponse> {
@@ -397,4 +399,10 @@ Perform your specialized task and return the results in a structured JSON format
   }
 }
 
+// Default singleton (uses env var) – for backward compatibility
 export const scriptForgeAI = new ScriptForgeAIService();
+
+// Factory for per-user instances
+export function createScriptForgeAI(apiKey?: string) {
+  return apiKey ? new ScriptForgeAIService(apiKey) : scriptForgeAI;
+}

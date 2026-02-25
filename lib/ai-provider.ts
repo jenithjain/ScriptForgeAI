@@ -19,16 +19,41 @@ import { createLogger } from '@/lib/logger';
 const log = createLogger('ai-provider');
 
 // Environment validation
-const GEMINI_API_KEY = process.env.GOOGLE_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
+const ENV_API_KEY = process.env.GOOGLE_GEMINI_API_KEY || process.env.GEMINI_API_KEY || '';
 
-if (!GEMINI_API_KEY) {
-  throw new Error('GEMINI_API_KEY or GOOGLE_GEMINI_API_KEY is not defined in environment variables');
+// Singleton provider (env var) – used as default fallback
+let _defaultProvider: ReturnType<typeof createGoogleGenerativeAI> | null = null;
+
+/**
+ * Get or create a Google Generative AI provider.
+ * If apiKey is supplied, a fresh per-user provider is created.
+ * Otherwise falls back to the env-var singleton.
+ */
+export function getGoogleProvider(apiKey?: string) {
+  if (apiKey) {
+    return createGoogleGenerativeAI({ apiKey });
+  }
+  if (!ENV_API_KEY) {
+    throw new Error(
+      'No Gemini API key available. Provide a per-user key or set GOOGLE_GEMINI_API_KEY in environment variables.'
+    );
+  }
+  if (!_defaultProvider) {
+    _defaultProvider = createGoogleGenerativeAI({ apiKey: ENV_API_KEY });
+  }
+  return _defaultProvider;
 }
 
-// Initialize Google Generative AI provider
-const google = createGoogleGenerativeAI({
-  apiKey: GEMINI_API_KEY,
-});
+// Initialize Google Generative AI provider (backward-compatible alias)
+const google = new Proxy(function(){} as unknown as ReturnType<typeof createGoogleGenerativeAI>, {
+  apply(_target: any, _thisArg: any, args: any[]) {
+    return (getGoogleProvider() as any)(...args);
+  },
+  get(_target, prop, receiver) {
+    if (prop === 'prototype' || prop === 'constructor') return undefined;
+    return Reflect.get(getGoogleProvider(), prop, receiver);
+  },
+}) as ReturnType<typeof createGoogleGenerativeAI>;
 
 // ============================================================================
 // MODEL CONFIGURATIONS
@@ -49,6 +74,20 @@ export const models = {
   reasoning: google('gemini-2.0-flash'),
   knowledgeGraph: google('gemini-2.5-pro'),
 };
+
+/**
+ * Create a per-user model set from a user's API key.
+ */
+export function createModels(apiKey?: string) {
+  if (!apiKey) return models; // use defaults
+  const provider = getGoogleProvider(apiKey);
+  return {
+    flash: provider('gemini-2.0-flash'),
+    pro: provider('gemini-2.5-pro'),
+    reasoning: provider('gemini-2.0-flash'),
+    knowledgeGraph: provider('gemini-2.5-pro'),
+  };
+}
 
 export type ModelType = keyof typeof models;
 
@@ -86,17 +125,19 @@ const DEFAULT_OPTIONS: Required<GenerationOptions> = {
  */
 export async function safeGenerateText(
   prompt: string,
-  options: GenerationOptions & { model?: ModelType } = {}
+  options: GenerationOptions & { model?: ModelType; apiKey?: string } = {}
 ): Promise<{ text: string; success: boolean; error?: string }> {
   const {
     model: modelType = 'flash',
+    apiKey,
     maxRetries = DEFAULT_OPTIONS.maxRetries,
     timeout = DEFAULT_OPTIONS.timeout,
     temperature = DEFAULT_OPTIONS.temperature,
     maxTokens = DEFAULT_OPTIONS.maxTokens,
   } = options;
 
-  const model = models[modelType];
+  const modelSet = createModels(apiKey);
+  const model = modelSet[modelType];
   const startTime = Date.now();
   let lastError: Error | null = null;
 
@@ -173,17 +214,19 @@ export async function safeGenerateText(
 export async function safeGenerateObject<T>(
   prompt: string,
   schema: z.ZodType<T>,
-  options: GenerationOptions & { model?: ModelType } = {}
+  options: GenerationOptions & { model?: ModelType; apiKey?: string } = {}
 ): Promise<{ object: T | null; success: boolean; error?: string }> {
   const {
     model: modelType = 'flash',
+    apiKey,
     maxRetries = DEFAULT_OPTIONS.maxRetries,
     timeout = DEFAULT_OPTIONS.timeout,
     temperature = 0.7, // Lower for structured output
     maxTokens = DEFAULT_OPTIONS.maxTokens,
   } = options;
 
-  const model = models[modelType];
+  const modelSet = createModels(apiKey);
+  const model = modelSet[modelType];
   const startTime = Date.now();
   let lastError: Error | null = null;
 
@@ -241,17 +284,19 @@ export async function safeGenerateObject<T>(
  */
 export async function safeStreamText(
   prompt: string,
-  options: GenerationOptions & { model?: ModelType; onChunk?: (chunk: string) => void } = {}
+  options: GenerationOptions & { model?: ModelType; apiKey?: string; onChunk?: (chunk: string) => void } = {}
 ) {
   const {
     model: modelType = 'flash',
+    apiKey,
     timeout = DEFAULT_OPTIONS.timeout,
     temperature = DEFAULT_OPTIONS.temperature,
     maxTokens = DEFAULT_OPTIONS.maxTokens,
     onChunk,
   } = options;
 
-  const model = models[modelType];
+  const modelSet = createModels(apiKey);
+  const model = modelSet[modelType];
 
   try {
     const result = streamText({
