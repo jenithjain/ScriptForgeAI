@@ -18,7 +18,7 @@ export async function GET() {
     await dbConnect();
 
     const user = await User.findOne({ email: session.user.email })
-      .select('-password -apiKeys')
+      .select('-password -apiKeys.gemini -apiKeys.midjourney -apiKeys.other')
       .lean();
 
     if (!user) {

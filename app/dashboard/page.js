@@ -3,98 +3,81 @@
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Progress } from "@/components/ui/progress";
+import { Separator } from "@/components/ui/separator";
 import Footer from "@/components/Footer";
 import {
-  LineChart, Line, BarChart, Bar, PieChart, Pie, Cell,
-  XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Area, AreaChart,
-  RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar,
-  ComposedChart
+  AreaChart, Area, BarChart, Bar,
+  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  RadialBarChart, RadialBar
 } from "recharts";
 import {
-  ArrowUpRight, BookOpen, TrendingUp,
-  Users, Activity, GitBranch, FileText, Sparkles,
-  PenTool, Target, Network, Shield, Video,
+  ArrowDownRight, BookOpen, TrendingUp,
+  Activity, Sparkles,
+  PenTool, Network, Video,
   Loader2, RefreshCw, Clock, CheckCircle2, AlertCircle,
-  FolderOpen, Save
+  FolderOpen, Save, Flame, BarChart3,
+  ChevronRight
 } from "lucide-react";
 
-const CHART_COLORS = {
+const COLORS = {
   light: {
-    primary: "#10b981",
-    secondary: "#3b82f6",
-    tertiary: "#f59e0b",
-    quaternary: "#8b5cf6",
-    fifth: "#ec4899",
-    sixth: "#ef4444",
-    grid: "#e2e8f0",
-    axis: "#64748b",
-    tooltipBg: "#ffffff",
-    tooltipBorder: "#e2e8f0",
+    primary: "#10b981", secondary: "#3b82f6", tertiary: "#f59e0b",
+    quaternary: "#8b5cf6", fifth: "#ec4899", sixth: "#ef4444",
+    grid: "#f1f5f9", axis: "#94a3b8",
+    tooltipBg: "#ffffff", tooltipBorder: "#e2e8f0",
   },
   dark: {
-    primary: "#34d399",
-    secondary: "#60a5fa",
-    tertiary: "#fbbf24",
-    quaternary: "#a78bfa",
-    fifth: "#f472b6",
-    sixth: "#f87171",
-    grid: "#334155",
-    axis: "#94a3b8",
-    tooltipBg: "#1e293b",
-    tooltipBorder: "#334155",
+    primary: "#34d399", secondary: "#60a5fa", tertiary: "#fbbf24",
+    quaternary: "#a78bfa", fifth: "#f472b6", sixth: "#f87171",
+    grid: "#1e293b", axis: "#64748b",
+    tooltipBg: "#0f172a", tooltipBorder: "#1e293b",
   }
 };
 
-const STATUS_CONFIG = {
-  draft: { color: "bg-slate-500/10 text-slate-500 border-slate-500/30", icon: FileText },
-  active: { color: "bg-blue-500/10 text-blue-500 border-blue-500/30", icon: Activity },
-  running: { color: "bg-amber-500/10 text-amber-500 border-amber-500/30", icon: Loader2 },
-  completed: { color: "bg-emerald-500/10 text-emerald-500 border-emerald-500/30", icon: CheckCircle2 },
-  partial: { color: "bg-orange-500/10 text-orange-500 border-orange-500/30", icon: AlertCircle },
-  error: { color: "bg-red-500/10 text-red-500 border-red-500/30", icon: AlertCircle },
+const STATUS_MAP = {
+  draft: { label: "Draft", color: "bg-slate-400", ring: "ring-slate-400/20" },
+  active: { label: "Active", color: "bg-blue-500", ring: "ring-blue-500/20" },
+  running: { label: "Running", color: "bg-amber-500", ring: "ring-amber-500/20" },
+  completed: { label: "Done", color: "bg-emerald-500", ring: "ring-emerald-500/20" },
+  partial: { label: "Partial", color: "bg-orange-500", ring: "ring-orange-500/20" },
+  error: { label: "Error", color: "bg-red-500", ring: "ring-red-500/20" },
 };
 
 export default function Dashboard() {
   const router = useRouter();
-  const [isDarkMode, setIsDarkMode] = useState(false);
-  const [chartColors, setChartColors] = useState(CHART_COLORS.light);
+  const [isDark, setIsDark] = useState(false);
+  const [colors, setColors] = useState(COLORS.light);
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    const updateTheme = () => {
-      const isDark = document.documentElement.classList.contains('dark');
-      setIsDarkMode(isDark);
-      setChartColors(isDark ? CHART_COLORS.dark : CHART_COLORS.light);
+    const update = () => {
+      const dark = document.documentElement.classList.contains("dark");
+      setIsDark(dark);
+      setColors(dark ? COLORS.dark : COLORS.light);
     };
-    updateTheme();
-    const observer = new MutationObserver(updateTheme);
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
-    return () => observer.disconnect();
+    update();
+    const obs = new MutationObserver(update);
+    obs.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+    return () => obs.disconnect();
   }, []);
 
   const fetchDashboard = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch('/api/dashboard/stats');
+      const res = await fetch("/api/dashboard/stats");
       if (!res.ok) {
-        if (res.status === 401) {
-          router.push('/login');
-          return;
-        }
-        throw new Error('Failed to load dashboard');
+        if (res.status === 401) { router.push("/login"); return; }
+        throw new Error("Failed to load dashboard");
       }
       const json = await res.json();
-      if (json.success) {
-        setData(json);
-      } else {
-        throw new Error(json.error || 'Unknown error');
-      }
+      if (json.success) setData(json);
+      else throw new Error(json.error || "Unknown error");
     } catch (err) {
       setError(err.message);
     } finally {
@@ -102,51 +85,23 @@ export default function Dashboard() {
     }
   }, [router]);
 
-  useEffect(() => {
-    fetchDashboard();
-  }, [fetchDashboard]);
-
-  const PIE_COLORS = [
-    chartColors.primary,
-    chartColors.secondary,
-    chartColors.tertiary,
-    chartColors.quaternary,
-    chartColors.fifth,
-    chartColors.sixth,
-  ];
+  useEffect(() => { fetchDashboard(); }, [fetchDashboard]);
 
   const tooltipStyle = {
-    backgroundColor: chartColors.tooltipBg,
-    border: `1px solid ${chartColors.tooltipBorder}`,
-    borderRadius: '8px',
-    color: isDarkMode ? '#f1f5f9' : '#0f172a'
+    backgroundColor: colors.tooltipBg,
+    border: `1px solid ${colors.tooltipBorder}`,
+    borderRadius: "10px",
+    fontSize: "13px",
+    color: isDark ? "#e2e8f0" : "#1e293b",
+    boxShadow: "0 4px 20px rgba(0,0,0,0.1)",
   };
-
-  const StatCard = ({ title, value, subtitle, icon: Icon, color = "emerald" }) => (
-    <Card className="overflow-hidden border-border/40 backdrop-blur-sm bg-card/50 hover:bg-card/70 transition-all duration-300 hover:shadow-lg group">
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="text-sm font-medium text-muted-foreground">
-          {title}
-        </CardTitle>
-        <div className={`p-2 rounded-lg bg-${color}-500/10 group-hover:bg-${color}-500 transition-colors`}>
-          <Icon className={`h-4 w-4 text-${color}-500 group-hover:text-white transition-colors`} />
-        </div>
-      </CardHeader>
-      <CardContent>
-        <div className="text-2xl font-bold text-foreground">{value}</div>
-        {subtitle && (
-          <p className="text-xs text-muted-foreground mt-1">{subtitle}</p>
-        )}
-      </CardContent>
-    </Card>
-  );
 
   if (loading) {
     return (
       <div className="min-h-screen w-full flex items-center justify-center">
-        <div className="text-center">
-          <Loader2 className="w-12 h-12 animate-spin text-emerald-500 mx-auto mb-4" />
-          <p className="text-muted-foreground">Loading dashboard...</p>
+        <div className="text-center space-y-3">
+          <Loader2 className="w-10 h-10 animate-spin text-emerald-500 mx-auto" />
+          <p className="text-sm text-muted-foreground">Loading your workspace...</p>
         </div>
       </div>
     );
@@ -155,12 +110,12 @@ export default function Dashboard() {
   if (error) {
     return (
       <div className="min-h-screen w-full flex items-center justify-center">
-        <div className="text-center max-w-md">
-          <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
-          <h3 className="text-xl font-bold text-foreground mb-2">Failed to load dashboard</h3>
-          <p className="text-muted-foreground mb-4">{error}</p>
-          <Button onClick={fetchDashboard} className="bg-emerald-500 hover:bg-emerald-600 text-white">
-            <RefreshCw className="w-4 h-4 mr-2" /> Try Again
+        <div className="text-center max-w-sm space-y-4">
+          <AlertCircle className="w-10 h-10 text-red-500 mx-auto" />
+          <h3 className="text-lg font-semibold">Something went wrong</h3>
+          <p className="text-sm text-muted-foreground">{error}</p>
+          <Button onClick={fetchDashboard} size="sm" className="bg-emerald-500 hover:bg-emerald-600 text-white">
+            <RefreshCw className="w-3.5 h-3.5 mr-1.5" /> Retry
           </Button>
         </div>
       </div>
@@ -171,613 +126,423 @@ export default function Dashboard() {
 
   const { stats, workflowWordCounts, activityTimeline, creationTimeline, recentWorkflows } = data;
 
-  // Prepare chart data
-  const statusPieData = Object.entries(stats.statusCounts)
-    .filter(([, count]) => count > 0)
-    .map(([status, count]) => ({ name: status.charAt(0).toUpperCase() + status.slice(1), value: count }));
-
-  const wordCountBarData = workflowWordCounts
-    .filter(w => w.wordCount > 0)
-    .sort((a, b) => b.wordCount - a.wordCount)
-    .slice(0, 10)
-    .map(w => ({
-      name: w.name.length > 20 ? w.name.substring(0, 20) + '...' : w.name,
-      words: w.wordCount,
-      status: w.status
-    }));
-
-  const videoAgentData = Object.entries(stats.videosByAgent || {}).map(([agent, count]) => ({
-    name: agent,
-    videos: count
-  }));
-
-  // Productivity radar data
-  const totalDaysActive = activityTimeline.length;
-  const avgSavesPerDay = totalDaysActive > 0
-    ? (activityTimeline.reduce((s, d) => s + d.saves, 0) / totalDaysActive).toFixed(1)
-    : 0;
+  // Derived metrics
   const completionRate = stats.totalWorkflows > 0
     ? Math.round((stats.statusCounts.completed / stats.totalWorkflows) * 100)
     : 0;
-  const editIntensity = stats.totalVersions > 0
-    ? Math.min(100, Math.round((stats.totalLinesAdded / Math.max(1, stats.totalVersions)) / 10 * 100))
+  const activeCount = stats.statusCounts.active + stats.statusCounts.running;
+  const avgWords = stats.totalWorkflows > 0
+    ? Math.round(stats.totalWords / stats.totalWorkflows)
     : 0;
 
-  const productivityRadar = [
-    { metric: "Workflows", value: Math.min(100, stats.totalWorkflows * 10), fullMark: 100 },
-    { metric: "Word Output", value: Math.min(100, Math.round(stats.totalWords / 500)), fullMark: 100 },
-    { metric: "Completion Rate", value: completionRate, fullMark: 100 },
-    { metric: "Edit Activity", value: editIntensity, fullMark: 100 },
-    { metric: "Consistency", value: Math.min(100, totalDaysActive * 3), fullMark: 100 },
-    { metric: "Video Output", value: Math.min(100, stats.totalVideos * 5), fullMark: 100 },
-  ];
+  // Writing streak (consecutive days with saves)
+  const sortedDays = activityTimeline.map(d => d.date).sort().reverse();
+  let streak = 0;
+  const today = new Date().toISOString().split("T")[0];
+  const yesterday = new Date(Date.now() - 86400000).toISOString().split("T")[0];
+  if (sortedDays.length > 0) {
+    const checkStart = sortedDays[0] === today || sortedDays[0] === yesterday;
+    if (checkStart) {
+      let prev = new Date(sortedDays[0]);
+      for (const d of sortedDays) {
+        const curr = new Date(d);
+        const diff = (prev - curr) / 86400000;
+        if (diff <= 1) { streak++; prev = curr; }
+        else break;
+      }
+    }
+  }
+
+  // Radial chart for completion
+  const radialData = [{ name: "Completed", value: completionRate, fill: colors.primary }];
+
+  // Top scripts by word count
+  const topScripts = workflowWordCounts
+    .filter(w => w.wordCount > 0)
+    .sort((a, b) => b.wordCount - a.wordCount)
+    .slice(0, 5);
+  const maxWords = topScripts.length > 0 ? topScripts[0].wordCount : 1;
 
   return (
     <div className="min-h-screen w-full">
-      <div className="container mx-auto p-6 space-y-8 max-w-7xl">
+      <div className="container mx-auto px-4 sm:px-6 py-6 space-y-6 max-w-7xl">
+
         {/* Header */}
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h1 className="text-4xl font-bold text-foreground mb-2">
-              Dashboard
+            <h1 className="text-3xl font-bold tracking-tight">
+              {data.user?.name ? `Welcome back, ${data.user.name.split(" ")[0]}` : "Dashboard"}
             </h1>
-            <p className="text-muted-foreground">
-              {data.user?.name ? `Welcome back, ${data.user.name}` : 'Your creative workspace at a glance'}
+            <p className="text-sm text-muted-foreground mt-1">
+              Here&apos;s an overview of your creative workspace
             </p>
           </div>
-          <div className="flex items-center gap-3">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={fetchDashboard}
-              className="gap-2"
-            >
-              <RefreshCw className="h-4 w-4" />
-              Refresh
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="sm" onClick={fetchDashboard} className="h-8 px-2.5">
+              <RefreshCw className="h-3.5 w-3.5" />
             </Button>
             <Button
-              className="bg-emerald-500 hover:bg-emerald-600 text-white"
-              onClick={() => router.push('/workflows/create')}
+              size="sm"
+              className="bg-emerald-500 hover:bg-emerald-600 text-white h-8"
+              onClick={() => router.push("/workflows/create")}
             >
-              <PenTool className="h-4 w-4 mr-2" />
+              <Sparkles className="h-3.5 w-3.5 mr-1.5" />
               New Workflow
             </Button>
           </div>
         </div>
 
-        {/* Stats Grid */}
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          <StatCard
-            title="Total Workflows"
-            value={stats.totalWorkflows}
-            subtitle={`${stats.statusCounts.completed} completed, ${stats.statusCounts.active + stats.statusCounts.running} active`}
-            icon={FolderOpen}
-          />
-          <StatCard
-            title="Total Words Written"
-            value={stats.totalWords.toLocaleString('en-IN')}
-            subtitle={`Across ${workflowWordCounts.filter(w => w.wordCount > 0).length} scripts`}
-            icon={BookOpen}
-          />
-          <StatCard
-            title="Script Versions"
-            value={stats.totalVersions}
-            subtitle={`+${stats.totalLinesAdded.toLocaleString('en-IN')} / -${stats.totalLinesRemoved.toLocaleString('en-IN')} lines`}
-            icon={Save}
-          />
-          <StatCard
-            title="Videos Generated"
-            value={stats.totalVideos}
-            subtitle={`${stats.videoStatusCounts.completed} completed`}
-            icon={Video}
-          />
+        {/* KPI Strip */}
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+          <KPICard label="Workflows" value={stats.totalWorkflows} sub={`${activeCount} active`} icon={FolderOpen} accent="emerald" />
+          <KPICard label="Total Words" value={formatNumber(stats.totalWords)} sub={`~${formatNumber(avgWords)} avg`} icon={BookOpen} accent="blue" />
+          <KPICard label="Versions" value={stats.totalVersions} sub={`+${formatNumber(stats.totalLinesAdded)} lines`} icon={Save} accent="violet" />
+          <KPICard label="Videos" value={stats.totalVideos} sub={`${stats.videoStatusCounts.completed} done`} icon={Video} accent="pink" />
+          <KPICard label="Writing Streak" value={`${streak}d`} sub={streak > 0 ? "Keep it up!" : "Start writing!"} icon={Flame} accent="amber" />
         </div>
 
-        {/* Main Charts */}
-        <Tabs defaultValue="overview" className="space-y-4">
-          <TabsList className="bg-muted/50 backdrop-blur-sm flex-wrap h-auto gap-1 p-1">
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="activity">Writing Activity</TabsTrigger>
-            <TabsTrigger value="productivity">Productivity</TabsTrigger>
-            <TabsTrigger value="workflows">Workflows</TabsTrigger>
-            <TabsTrigger value="videos">Videos</TabsTrigger>
-          </TabsList>
+        {/* Main Grid */}
+        <div className="grid gap-4 lg:grid-cols-12">
 
-          {/* Overview Tab */}
-          <TabsContent value="overview" className="space-y-4">
-            <div className="grid gap-4 md:grid-cols-7">
-              <Card className="col-span-4 border-border/40 backdrop-blur-sm bg-card/50">
-                <CardHeader>
-                  <CardTitle>Words per Workflow</CardTitle>
-                  <CardDescription>
-                    Word count across your top scripts
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="pl-2">
-                  {wordCountBarData.length > 0 ? (
-                    <ResponsiveContainer width="100%" height={350}>
-                      <BarChart data={wordCountBarData} layout="vertical" margin={{ left: 20 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke={chartColors.grid} />
-                        <XAxis type="number" stroke={chartColors.axis} style={{ fontSize: '12px' }} />
-                        <YAxis
-                          type="category"
-                          dataKey="name"
-                          stroke={chartColors.axis}
-                          style={{ fontSize: '11px' }}
-                          width={140}
-                          tick={{ fill: chartColors.axis }}
-                        />
-                        <Tooltip contentStyle={tooltipStyle} />
-                        <Bar dataKey="words" fill={chartColors.primary} radius={[0, 4, 4, 0]} name="Words" />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  ) : (
-                    <div className="flex items-center justify-center h-[350px] text-muted-foreground">
-                      <div className="text-center">
-                        <BookOpen className="w-10 h-10 mx-auto mb-2 opacity-30" />
-                        <p>No word count data yet</p>
-                        <p className="text-xs mt-1">Start writing to see stats here</p>
-                      </div>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
+          {/* Activity Chart */}
+          <Card className="lg:col-span-8 border-border/40 bg-card/50 backdrop-blur-sm">
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-base">Writing Activity</CardTitle>
+                  <CardDescription className="text-xs">Saves &amp; edits over the last 30 days</CardDescription>
+                </div>
+                <Badge variant="outline" className="text-xs font-normal">
+                  <Activity className="w-3 h-3 mr-1" />
+                  30 days
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardContent className="pt-0">
+              {activityTimeline.length > 0 ? (
+                <ResponsiveContainer width="100%" height={260}>
+                  <AreaChart data={activityTimeline} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="gradSaves" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor={colors.primary} stopOpacity={0.3} />
+                        <stop offset="100%" stopColor={colors.primary} stopOpacity={0} />
+                      </linearGradient>
+                      <linearGradient id="gradLines" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor={colors.secondary} stopOpacity={0.2} />
+                        <stop offset="100%" stopColor={colors.secondary} stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke={colors.grid} vertical={false} />
+                    <XAxis
+                      dataKey="date" stroke={colors.axis} style={{ fontSize: "10px" }}
+                      tickFormatter={(d) => new Date(d).toLocaleDateString("en-US", { day: "numeric", month: "short" })}
+                      axisLine={false} tickLine={false}
+                    />
+                    <YAxis stroke={colors.axis} style={{ fontSize: "10px" }} axisLine={false} tickLine={false} />
+                    <Tooltip contentStyle={tooltipStyle} labelFormatter={(d) => new Date(d).toLocaleDateString("en-US", { weekday: "short", month: "long", day: "numeric" })} />
+                    <Area type="monotone" dataKey="saves" stroke={colors.primary} fill="url(#gradSaves)" strokeWidth={2} name="Saves" />
+                    <Area type="monotone" dataKey="linesAdded" stroke={colors.secondary} fill="url(#gradLines)" strokeWidth={1.5} name="Lines Added" />
+                  </AreaChart>
+                </ResponsiveContainer>
+              ) : (
+                <EmptyState icon={Activity} message="No activity yet" hint="Start saving script versions to see trends" height="h-[260px]" />
+              )}
+            </CardContent>
+          </Card>
 
-              <Card className="col-span-3 border-border/40 backdrop-blur-sm bg-card/50">
-                <CardHeader>
-                  <CardTitle>Workflow Status</CardTitle>
-                  <CardDescription>
-                    Distribution by current status
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  {statusPieData.length > 0 ? (
-                    <>
-                      <ResponsiveContainer width="100%" height={250}>
-                        <PieChart>
-                          <Pie
-                            data={statusPieData}
-                            cx="50%"
-                            cy="50%"
-                            labelLine={false}
-                            label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                            outerRadius={90}
-                            fill="#8884d8"
-                            dataKey="value"
-                          >
-                            {statusPieData.map((entry, index) => (
-                              <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
-                            ))}
-                          </Pie>
-                          <Tooltip contentStyle={tooltipStyle} />
-                        </PieChart>
-                      </ResponsiveContainer>
-                      <div className="mt-4 space-y-2">
-                        {statusPieData.map((item, idx) => (
-                          <div key={item.name} className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              <div className="w-3 h-3 rounded-full" style={{ backgroundColor: PIE_COLORS[idx] }} />
-                              <span className="text-sm text-muted-foreground">{item.name}</span>
-                            </div>
-                            <span className="text-sm font-medium">{item.value} workflows</span>
-                          </div>
-                        ))}
-                      </div>
-                    </>
-                  ) : (
-                    <div className="flex items-center justify-center h-[300px] text-muted-foreground">
-                      <div className="text-center">
-                        <FolderOpen className="w-10 h-10 mx-auto mb-2 opacity-30" />
-                        <p>No workflows yet</p>
-                      </div>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
-          </TabsContent>
-
-          {/* Activity Tab */}
-          <TabsContent value="activity" className="space-y-4">
-            <div className="grid gap-4 md:grid-cols-2">
-              <Card className="border-border/40 backdrop-blur-sm bg-card/50">
-                <CardHeader>
-                  <CardTitle>Daily Save Activity</CardTitle>
-                  <CardDescription>
-                    Version saves per day (last 30 days)
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  {activityTimeline.length > 0 ? (
-                    <ResponsiveContainer width="100%" height={300}>
-                      <AreaChart data={activityTimeline}>
-                        <defs>
-                          <linearGradient id="colorSaves" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor={chartColors.primary} stopOpacity={0.3}/>
-                            <stop offset="95%" stopColor={chartColors.primary} stopOpacity={0}/>
-                          </linearGradient>
-                        </defs>
-                        <CartesianGrid strokeDasharray="3 3" stroke={chartColors.grid} />
-                        <XAxis
-                          dataKey="date"
-                          stroke={chartColors.axis}
-                          style={{ fontSize: '10px' }}
-                          tickFormatter={(d) => new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
-                        />
-                        <YAxis stroke={chartColors.axis} style={{ fontSize: '12px' }} />
-                        <Tooltip
-                          contentStyle={tooltipStyle}
-                          labelFormatter={(d) => new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}
-                        />
-                        <Area
-                          type="monotone"
-                          dataKey="saves"
-                          stroke={chartColors.primary}
-                          fillOpacity={1}
-                          fill="url(#colorSaves)"
-                          strokeWidth={2}
-                          name="Saves"
-                        />
-                      </AreaChart>
-                    </ResponsiveContainer>
-                  ) : (
-                    <div className="flex items-center justify-center h-[300px] text-muted-foreground">
-                      <div className="text-center">
-                        <Activity className="w-10 h-10 mx-auto mb-2 opacity-30" />
-                        <p>No recent activity</p>
-                        <p className="text-xs mt-1">Activity appears as you save versions</p>
-                      </div>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-
-              <Card className="border-border/40 backdrop-blur-sm bg-card/50">
-                <CardHeader>
-                  <CardTitle>Lines Changed</CardTitle>
-                  <CardDescription>
-                    Lines added vs removed per day
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  {activityTimeline.length > 0 ? (
-                    <ResponsiveContainer width="100%" height={300}>
-                      <ComposedChart data={activityTimeline}>
-                        <CartesianGrid strokeDasharray="3 3" stroke={chartColors.grid} />
-                        <XAxis
-                          dataKey="date"
-                          stroke={chartColors.axis}
-                          style={{ fontSize: '10px' }}
-                          tickFormatter={(d) => new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
-                        />
-                        <YAxis stroke={chartColors.axis} style={{ fontSize: '12px' }} />
-                        <Tooltip
-                          contentStyle={tooltipStyle}
-                          labelFormatter={(d) => new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}
-                        />
-                        <Legend />
-                        <Bar dataKey="linesAdded" fill={chartColors.primary} radius={[4, 4, 0, 0]} name="Lines Added" />
-                        <Bar dataKey="linesRemoved" fill={chartColors.sixth} radius={[4, 4, 0, 0]} name="Lines Removed" />
-                      </ComposedChart>
-                    </ResponsiveContainer>
-                  ) : (
-                    <div className="flex items-center justify-center h-[300px] text-muted-foreground">
-                      <div className="text-center">
-                        <GitBranch className="w-10 h-10 mx-auto mb-2 opacity-30" />
-                        <p>No edit history yet</p>
-                      </div>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
-          </TabsContent>
-
-          {/* Productivity Tab */}
-          <TabsContent value="productivity" className="space-y-4">
-            <div className="grid gap-4 md:grid-cols-7">
-              <Card className="col-span-4 border-border/40 backdrop-blur-sm bg-card/50">
-                <CardHeader>
-                  <CardTitle>Productivity Radar</CardTitle>
-                  <CardDescription>
-                    Overall creative output across dimensions
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <ResponsiveContainer width="100%" height={400}>
-                    <RadarChart data={productivityRadar}>
-                      <PolarGrid stroke={chartColors.grid} />
-                      <PolarAngleAxis
-                        dataKey="metric"
-                        stroke={chartColors.axis}
-                        style={{ fontSize: '12px' }}
-                      />
-                      <PolarRadiusAxis
-                        angle={90}
-                        domain={[0, 100]}
-                        stroke={chartColors.axis}
-                        style={{ fontSize: '10px' }}
-                      />
-                      <Radar
-                        name="Score"
-                        dataKey="value"
-                        stroke={chartColors.primary}
-                        fill={chartColors.primary}
-                        fillOpacity={0.5}
-                        strokeWidth={2}
-                      />
-                      <Tooltip contentStyle={tooltipStyle} />
-                    </RadarChart>
-                  </ResponsiveContainer>
-                  <div className="mt-4 grid grid-cols-2 md:grid-cols-3 gap-3">
-                    {productivityRadar.map((item) => (
-                      <div key={item.metric} className="p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-all">
-                        <p className="text-xs text-muted-foreground mb-1">{item.metric}</p>
-                        <div className="flex items-center gap-2">
-                          <p className="text-xl font-bold">{item.value}%</p>
-                          <ArrowUpRight className="h-3.5 w-3.5 text-emerald-500" />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="col-span-3 border-border/40 backdrop-blur-sm bg-card/50">
-                <CardHeader>
-                  <CardTitle>Workflow Growth</CardTitle>
-                  <CardDescription>
-                    New workflows created over time
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  {creationTimeline.length > 0 ? (
-                    <ResponsiveContainer width="100%" height={400}>
-                      <BarChart data={creationTimeline}>
-                        <CartesianGrid strokeDasharray="3 3" stroke={chartColors.grid} />
-                        <XAxis dataKey="month" stroke={chartColors.axis} style={{ fontSize: '12px' }} />
-                        <YAxis stroke={chartColors.axis} style={{ fontSize: '12px' }} allowDecimals={false} />
-                        <Tooltip contentStyle={tooltipStyle} />
-                        <Bar dataKey="workflows" fill={chartColors.quaternary} radius={[6, 6, 0, 0]} name="Workflows Created" />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  ) : (
-                    <div className="flex items-center justify-center h-[400px] text-muted-foreground">
-                      <div className="text-center">
-                        <TrendingUp className="w-10 h-10 mx-auto mb-2 opacity-30" />
-                        <p>No growth data yet</p>
-                      </div>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
-          </TabsContent>
-
-          {/* Workflows Tab */}
-          <TabsContent value="workflows" className="space-y-4">
-            <Card className="border-border/40 backdrop-blur-sm bg-card/50">
-              <CardHeader>
-                <CardTitle>Recent Workflows</CardTitle>
-                <CardDescription>
-                  Your latest projects and their current status
-                </CardDescription>
+          {/* Completion Ring + Quick Stats */}
+          <div className="lg:col-span-4 space-y-4">
+            <Card className="border-border/40 bg-card/50 backdrop-blur-sm">
+              <CardHeader className="pb-0">
+                <CardTitle className="text-base">Completion Rate</CardTitle>
               </CardHeader>
-              <CardContent>
-                {recentWorkflows.length > 0 ? (
-                  <div className="space-y-3">
-                    {recentWorkflows.map((workflow) => {
-                      const config = STATUS_CONFIG[workflow.status] || STATUS_CONFIG.draft;
-                      const StatusIcon = config.icon;
-                      return (
-                        <div
-                          key={workflow.id}
-                          onClick={() => router.push(`/workflows/${workflow.id}`)}
-                          className="flex items-center justify-between p-4 rounded-lg border border-border/40 bg-muted/30 hover:bg-muted/50 transition-colors cursor-pointer group"
-                        >
-                          <div className="flex items-center gap-4 min-w-0">
-                            <div className={`p-2 rounded-full ${config.color}`}>
-                              <StatusIcon className="h-4 w-4" />
-                            </div>
-                            <div className="min-w-0">
-                              <p className="font-medium text-foreground truncate group-hover:text-emerald-500 transition-colors">
-                                {workflow.name}
-                              </p>
-                              <p className="text-sm text-muted-foreground">
-                                {workflow.nodeCount} nodes
-                                {workflow.description && ` · ${workflow.description.substring(0, 50)}${workflow.description.length > 50 ? '...' : ''}`}
-                              </p>
-                            </div>
-                          </div>
-                          <div className="text-right shrink-0 ml-4">
-                            <Badge variant="outline" className={config.color}>
-                              {workflow.status}
-                            </Badge>
-                            <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1 justify-end">
-                              <Clock className="w-3 h-3" />
-                              {new Date(workflow.updatedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
-                            </p>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <div className="text-center py-12 text-muted-foreground">
-                    <FolderOpen className="w-12 h-12 mx-auto mb-3 opacity-30" />
-                    <h3 className="font-semibold text-foreground mb-1">No workflows yet</h3>
-                    <p className="text-sm mb-4">Create your first workflow to get started</p>
-                    <Button
-                      className="bg-emerald-500 hover:bg-emerald-600 text-white"
-                      onClick={() => router.push('/workflows/create')}
+              <CardContent className="flex items-center justify-center pb-4">
+                <div className="relative">
+                  <ResponsiveContainer width={160} height={160}>
+                    <RadialBarChart
+                      cx="50%" cy="50%" innerRadius="70%" outerRadius="100%"
+                      barSize={12} data={radialData} startAngle={90} endAngle={-270}
                     >
-                      <Sparkles className="w-4 h-4 mr-2" />
-                      Create Workflow
-                    </Button>
+                      <RadialBar background={{ fill: isDark ? "#1e293b" : "#f1f5f9" }} dataKey="value" cornerRadius={6} />
+                    </RadialBarChart>
+                  </ResponsiveContainer>
+                  <div className="absolute inset-0 flex flex-col items-center justify-center">
+                    <span className="text-3xl font-bold">{completionRate}%</span>
+                    <span className="text-[10px] text-muted-foreground">completed</span>
                   </div>
-                )}
+                </div>
               </CardContent>
             </Card>
 
-            {/* Workflow word counts breakdown */}
-            {wordCountBarData.length > 0 && (
-              <Card className="border-border/40 backdrop-blur-sm bg-card/50">
-                <CardHeader>
-                  <CardTitle>Script Length Comparison</CardTitle>
-                  <CardDescription>Word count across your scripts</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <ResponsiveContainer width="100%" height={300}>
-                    <BarChart data={wordCountBarData}>
-                      <CartesianGrid strokeDasharray="3 3" stroke={chartColors.grid} />
-                      <XAxis dataKey="name" stroke={chartColors.axis} style={{ fontSize: '10px' }} angle={-20} textAnchor="end" height={60} />
-                      <YAxis stroke={chartColors.axis} style={{ fontSize: '12px' }} />
-                      <Tooltip contentStyle={tooltipStyle} />
-                      <Bar dataKey="words" fill={chartColors.secondary} radius={[6, 6, 0, 0]} name="Words" />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </CardContent>
-              </Card>
-            )}
-          </TabsContent>
+            <Card className="border-border/40 bg-card/50 backdrop-blur-sm">
+              <CardContent className="pt-5 space-y-3">
+                <MiniStat label="Completed" value={`${stats.statusCounts.completed}/${stats.totalWorkflows}`} color="emerald" icon={CheckCircle2} />
+                <Separator className="opacity-50" />
+                <MiniStat label="Lines Added" value={`+${formatNumber(stats.totalLinesAdded)}`} color="blue" icon={TrendingUp} />
+                <Separator className="opacity-50" />
+                <MiniStat label="Lines Removed" value={`-${formatNumber(stats.totalLinesRemoved)}`} color="red" icon={ArrowDownRight} />
+              </CardContent>
+            </Card>
+          </div>
+        </div>
 
-          {/* Videos Tab */}
-          <TabsContent value="videos" className="space-y-4">
-            <div className="grid gap-4 md:grid-cols-3">
-              <Card className="border-border/40 backdrop-blur-sm bg-card/50">
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Total Videos</CardTitle>
-                  <Video className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{stats.totalVideos}</div>
-                  <p className="text-xs text-muted-foreground">
-                    {stats.videoStatusCounts.completed} completed, {stats.videoStatusCounts.processing} processing
-                  </p>
-                </CardContent>
-              </Card>
-              <Card className="border-border/40 backdrop-blur-sm bg-card/50">
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Success Rate</CardTitle>
-                  <CheckCircle2 className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">
-                    {stats.totalVideos > 0
-                      ? Math.round((stats.videoStatusCounts.completed / stats.totalVideos) * 100)
-                      : 0}%
+        {/* Second Row */}
+        <div className="grid gap-4 lg:grid-cols-12">
+
+          {/* Top Scripts */}
+          <Card className="lg:col-span-4 border-border/40 bg-card/50 backdrop-blur-sm">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Top Scripts</CardTitle>
+              <CardDescription className="text-xs">Ranked by word count</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {topScripts.length > 0 ? topScripts.map((script, i) => (
+                <div key={script.id} className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium truncate max-w-[65%]">
+                      <span className="text-muted-foreground mr-1.5">#{i + 1}</span>
+                      {script.name}
+                    </span>
+                    <span className="text-xs text-muted-foreground font-mono">{formatNumber(script.wordCount)}</span>
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    {stats.videoStatusCounts.failed} failed
-                  </p>
-                </CardContent>
-              </Card>
-              <Card className="border-border/40 backdrop-blur-sm bg-card/50">
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Agent Types</CardTitle>
-                  <Network className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{Object.keys(stats.videosByAgent || {}).length}</div>
-                  <p className="text-xs text-muted-foreground">
-                    Different generation agents used
-                  </p>
-                </CardContent>
-              </Card>
+                  <div className="h-1.5 rounded-full bg-muted/50 overflow-hidden">
+                    <div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${(script.wordCount / maxWords) * 100}%` }} />
+                  </div>
+                </div>
+              )) : (
+                <EmptyState icon={BookOpen} message="No scripts yet" hint="Write your first script" height="h-[200px]" />
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Workflow Growth */}
+          <Card className="lg:col-span-4 border-border/40 bg-card/50 backdrop-blur-sm">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Workflow Growth</CardTitle>
+              <CardDescription className="text-xs">New workflows per month</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {creationTimeline.length > 0 ? (
+                <ResponsiveContainer width="100%" height={220}>
+                  <BarChart data={creationTimeline} margin={{ top: 5, right: 5, left: -25, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke={colors.grid} vertical={false} />
+                    <XAxis dataKey="month" stroke={colors.axis} style={{ fontSize: "10px" }} axisLine={false} tickLine={false} />
+                    <YAxis stroke={colors.axis} style={{ fontSize: "10px" }} axisLine={false} tickLine={false} allowDecimals={false} />
+                    <Tooltip contentStyle={tooltipStyle} />
+                    <Bar dataKey="workflows" fill={colors.quaternary} radius={[4, 4, 0, 0]} name="Workflows" />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <EmptyState icon={BarChart3} message="No growth data" hint="Create workflows to track growth" height="h-[220px]" />
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Video Summary */}
+          <Card className="lg:col-span-4 border-border/40 bg-card/50 backdrop-blur-sm">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Video Generation</CardTitle>
+              <CardDescription className="text-xs">Cinematic teaser stats</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-xl bg-muted/30 p-3 text-center">
+                  <p className="text-2xl font-bold">{stats.totalVideos}</p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">Total</p>
+                </div>
+                <div className="rounded-xl bg-muted/30 p-3 text-center">
+                  <p className="text-2xl font-bold text-emerald-500">{stats.videoStatusCounts.completed}</p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">Completed</p>
+                </div>
+                <div className="rounded-xl bg-muted/30 p-3 text-center">
+                  <p className="text-2xl font-bold text-amber-500">{stats.videoStatusCounts.processing}</p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">Processing</p>
+                </div>
+                <div className="rounded-xl bg-muted/30 p-3 text-center">
+                  <p className="text-2xl font-bold text-red-500">{stats.videoStatusCounts.failed}</p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">Failed</p>
+                </div>
+              </div>
+              {stats.totalVideos > 0 && (
+                <div className="space-y-1.5">
+                  <div className="flex justify-between text-xs text-muted-foreground">
+                    <span>Success Rate</span>
+                    <span className="font-medium text-foreground">
+                      {Math.round((stats.videoStatusCounts.completed / stats.totalVideos) * 100)}%
+                    </span>
+                  </div>
+                  <div className="h-1.5 rounded-full bg-muted/50 overflow-hidden">
+                    <div className="h-full rounded-full bg-emerald-500" style={{ width: `${(stats.videoStatusCounts.completed / stats.totalVideos) * 100}%` }} />
+                  </div>
+                </div>
+              )}
+              {stats.totalVideos === 0 && (
+                <EmptyState icon={Video} message="No videos yet" hint="Use the Cinematic Teaser agent" height="h-[60px]" />
+              )}
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Recent Workflows */}
+        <Card className="border-border/40 bg-card/50 backdrop-blur-sm">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-base">Recent Workflows</CardTitle>
+                <CardDescription className="text-xs">Your latest projects</CardDescription>
+              </div>
+              <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => router.push("/workflows")}>
+                View All <ChevronRight className="w-3 h-3 ml-0.5" />
+              </Button>
             </div>
-
-            {videoAgentData.length > 0 && (
-              <Card className="border-border/40 backdrop-blur-sm bg-card/50">
-                <CardHeader>
-                  <CardTitle>Videos by Agent Type</CardTitle>
-                  <CardDescription>
-                    Distribution of generated videos across agent types
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <ResponsiveContainer width="100%" height={300}>
-                    <BarChart data={videoAgentData}>
-                      <CartesianGrid strokeDasharray="3 3" stroke={chartColors.grid} />
-                      <XAxis dataKey="name" stroke={chartColors.axis} style={{ fontSize: '12px' }} />
-                      <YAxis stroke={chartColors.axis} style={{ fontSize: '12px' }} allowDecimals={false} />
-                      <Tooltip contentStyle={tooltipStyle} />
-                      <Bar dataKey="videos" fill={chartColors.fifth} radius={[6, 6, 0, 0]} name="Videos" />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </CardContent>
-              </Card>
+          </CardHeader>
+          <CardContent>
+            {recentWorkflows.length > 0 ? (
+              <div className="space-y-1">
+                {recentWorkflows.map((wf) => {
+                  const st = STATUS_MAP[wf.status] || STATUS_MAP.draft;
+                  return (
+                    <div
+                      key={wf.id}
+                      onClick={() => router.push(`/workflows/${wf.id}`)}
+                      className="flex items-center gap-3 p-3 rounded-xl border border-transparent hover:border-border/60 hover:bg-muted/30 transition-all cursor-pointer group"
+                    >
+                      <div className={`w-2 h-2 rounded-full ${st.color} ring-4 ${st.ring} shrink-0`} />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate group-hover:text-emerald-500 transition-colors">{wf.name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {wf.nodeCount} agents{wf.description && ` · ${wf.description.substring(0, 60)}${wf.description.length > 60 ? "..." : ""}`}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <Badge variant="outline" className="text-[10px] h-5 px-1.5 font-normal">{st.label}</Badge>
+                        <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
+                          <Clock className="w-2.5 h-2.5" />{timeAgo(wf.updatedAt)}
+                        </span>
+                        <ChevronRight className="w-3.5 h-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="text-center py-10">
+                <FolderOpen className="w-10 h-10 mx-auto mb-3 text-muted-foreground/30" />
+                <p className="font-medium text-sm mb-1">No workflows yet</p>
+                <p className="text-xs text-muted-foreground mb-4">Create your first workflow to get started</p>
+                <Button size="sm" className="bg-emerald-500 hover:bg-emerald-600 text-white" onClick={() => router.push("/workflows/create")}>
+                  <Sparkles className="w-3.5 h-3.5 mr-1.5" /> Create Workflow
+                </Button>
+              </div>
             )}
-
-            {videoAgentData.length === 0 && (
-              <Card className="border-border/40 backdrop-blur-sm bg-card/50">
-                <CardContent className="py-12">
-                  <div className="text-center text-muted-foreground">
-                    <Video className="w-12 h-12 mx-auto mb-3 opacity-30" />
-                    <h3 className="font-semibold text-foreground mb-1">No videos generated yet</h3>
-                    <p className="text-sm">Use the video generation agents in your workflows to see stats here</p>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-          </TabsContent>
-        </Tabs>
+          </CardContent>
+        </Card>
 
         {/* Quick Actions */}
-        <div className="grid gap-4 md:grid-cols-3">
-          <Card
-            className="border-border/40 backdrop-blur-sm bg-card/50 hover:shadow-lg transition-shadow cursor-pointer group"
-            onClick={() => router.push('/workflows/create')}
-          >
-            <CardHeader>
-              <div className="flex items-center gap-3">
-                <div className="p-3 rounded-full bg-emerald-500/10 text-emerald-500 group-hover:bg-emerald-500 group-hover:text-white transition-colors">
-                  <Sparkles className="h-5 w-5" />
-                </div>
-                <div>
-                  <CardTitle className="text-lg">New Workflow</CardTitle>
-                  <CardDescription>Create a new script workflow</CardDescription>
-                </div>
-              </div>
-            </CardHeader>
-          </Card>
-
-          <Card
-            className="border-border/40 backdrop-blur-sm bg-card/50 hover:shadow-lg transition-shadow cursor-pointer group"
-            onClick={() => router.push('/story-graph')}
-          >
-            <CardHeader>
-              <div className="flex items-center gap-3">
-                <div className="p-3 rounded-full bg-purple-500/10 text-purple-500 group-hover:bg-purple-500 group-hover:text-white transition-colors">
-                  <Network className="h-5 w-5" />
-                </div>
-                <div>
-                  <CardTitle className="text-lg">Knowledge Graph</CardTitle>
-                  <CardDescription>Explore story connections</CardDescription>
-                </div>
-              </div>
-            </CardHeader>
-          </Card>
-
-          <Card
-            className="border-border/40 backdrop-blur-sm bg-card/50 hover:shadow-lg transition-shadow cursor-pointer group"
-            onClick={() => router.push('/workflows')}
-          >
-            <CardHeader>
-              <div className="flex items-center gap-3">
-                <div className="p-3 rounded-full bg-blue-500/10 text-blue-500 group-hover:bg-blue-500 group-hover:text-white transition-colors">
-                  <FolderOpen className="h-5 w-5" />
-                </div>
-                <div>
-                  <CardTitle className="text-lg">All Workflows</CardTitle>
-                  <CardDescription>Browse your projects</CardDescription>
-                </div>
-              </div>
-            </CardHeader>
-          </Card>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <QuickAction icon={PenTool} title="New Workflow" desc="Start a new AI-powered script" color="emerald" onClick={() => router.push("/workflows/create")} />
+          <QuickAction icon={Network} title="Story Graph" desc="Explore your story universe" color="violet" onClick={() => router.push("/story-graph")} />
+          <QuickAction icon={FolderOpen} title="All Workflows" desc="Browse & manage your projects" color="blue" onClick={() => router.push("/workflows")} />
         </div>
       </div>
 
       <Footer />
     </div>
   );
+}
+
+/* ─── Helper Components ─── */
+
+function KPICard({ label, value, sub, icon: Icon, accent }) {
+  const colorMap = {
+    emerald: { bg: "bg-emerald-500/10", text: "text-emerald-500" },
+    blue: { bg: "bg-blue-500/10", text: "text-blue-500" },
+    violet: { bg: "bg-violet-500/10", text: "text-violet-500" },
+    pink: { bg: "bg-pink-500/10", text: "text-pink-500" },
+    amber: { bg: "bg-amber-500/10", text: "text-amber-500" },
+  };
+  const c = colorMap[accent] || colorMap.emerald;
+  return (
+    <Card className="border-border/40 bg-card/50 backdrop-blur-sm hover:shadow-md transition-shadow">
+      <CardContent className="p-4">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">{label}</span>
+          <div className={`p-1.5 rounded-lg ${c.bg}`}>
+            <Icon className={`h-3.5 w-3.5 ${c.text}`} />
+          </div>
+        </div>
+        <p className="text-2xl font-bold tracking-tight">{value}</p>
+        <p className="text-[11px] text-muted-foreground mt-0.5">{sub}</p>
+      </CardContent>
+    </Card>
+  );
+}
+
+function MiniStat({ label, value, color, icon: Icon }) {
+  const colorMap = {
+    emerald: "text-emerald-500",
+    blue: "text-blue-500",
+    red: "text-red-500",
+  };
+  const c = colorMap[color] || "text-muted-foreground";
+  return (
+    <div className="flex items-center justify-between">
+      <div className="flex items-center gap-2">
+        <Icon className={`h-3.5 w-3.5 ${c}`} />
+        <span className="text-xs text-muted-foreground">{label}</span>
+      </div>
+      <span className="text-sm font-semibold">{value}</span>
+    </div>
+  );
+}
+
+function QuickAction({ icon: Icon, title, desc, color, onClick }) {
+  const colorMap = {
+    emerald: { bg: "bg-emerald-500/10", text: "text-emerald-500", hover: "group-hover:bg-emerald-500" },
+    violet: { bg: "bg-violet-500/10", text: "text-violet-500", hover: "group-hover:bg-violet-500" },
+    blue: { bg: "bg-blue-500/10", text: "text-blue-500", hover: "group-hover:bg-blue-500" },
+  };
+  const c = colorMap[color] || colorMap.emerald;
+  return (
+    <Card onClick={onClick} className="border-border/40 bg-card/50 backdrop-blur-sm hover:shadow-md transition-all cursor-pointer group">
+      <CardContent className="p-4 flex items-center gap-3">
+        <div className={`p-2.5 rounded-xl ${c.bg} ${c.text} ${c.hover} group-hover:text-white transition-colors`}>
+          <Icon className="h-4 w-4" />
+        </div>
+        <div>
+          <p className="text-sm font-medium group-hover:text-emerald-500 transition-colors">{title}</p>
+          <p className="text-[11px] text-muted-foreground">{desc}</p>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function EmptyState({ icon: Icon, message, hint, height = "h-[200px]" }) {
+  return (
+    <div className={`flex flex-col items-center justify-center ${height} text-muted-foreground`}>
+      <Icon className="w-8 h-8 opacity-20 mb-2" />
+      <p className="text-sm">{message}</p>
+      {hint && <p className="text-[10px] mt-0.5">{hint}</p>}
+    </div>
+  );
+}
+
+/* ─── Utilities ─── */
+
+function formatNumber(n) {
+  if (n >= 1000000) return (n / 1000000).toFixed(1) + "M";
+  if (n >= 1000) return (n / 1000).toFixed(1) + "K";
+  return n.toString();
+}
+
+function timeAgo(date) {
+  const now = new Date();
+  const d = new Date(date);
+  const diff = Math.floor((now - d) / 1000);
+  if (diff < 60) return "just now";
+  if (diff < 3600) return Math.floor(diff / 60) + "m ago";
+  if (diff < 86400) return Math.floor(diff / 3600) + "h ago";
+  if (diff < 604800) return Math.floor(diff / 86400) + "d ago";
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
