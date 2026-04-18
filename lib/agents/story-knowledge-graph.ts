@@ -514,7 +514,7 @@ export async function getGraphOverview(workflowId?: string): Promise<GraphData> 
           WHERE (n:Character OR n:Location OR n:Object OR n:Event OR n:PlotThread OR n:Chapter)
           AND (
             n.workflowId = $workflowId
-            OR (exists(n.workflowIds) AND $workflowId IN n.workflowIds)
+            OR (n.workflowIds IS NOT NULL AND $workflowId IN n.workflowIds)
             OR n.id STARTS WITH 'workflow-' + $workflowId
           )
           RETURN n, labels(n) as labels
@@ -803,7 +803,7 @@ export async function clearGraph(workflowId?: string): Promise<void> {
       await tx.run(`
         MATCH (n)
         WHERE n.workflowId = $workflowId
-           OR (exists(n.workflowIds) AND $workflowId IN n.workflowIds)
+            OR (n.workflowIds IS NOT NULL AND $workflowId IN n.workflowIds)
            OR n.id STARTS WITH 'workflow-' + $workflowId
         DETACH DELETE n
       `, { workflowId });
