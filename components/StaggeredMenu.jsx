@@ -89,33 +89,6 @@ export const StaggeredMenu = ({
     return () => ctx.revert();
   }, [menuButtonColor, position]);
 
-  // Close menu when clicking outside
-  useLayoutEffect(() => {
-    if (!open) return;
-
-    const handleClickOutside = (event) => {
-      const panel = panelRef.current;
-      const toggleBtn = toggleBtnRef.current;
-      
-      // Check if click is outside both the panel and toggle button
-      if (panel && toggleBtn && 
-          !panel.contains(event.target) && 
-          !toggleBtn.contains(event.target)) {
-        toggleMenu();
-      }
-    };
-
-    // Add listener with a small delay to prevent immediate closure
-    const timeoutId = setTimeout(() => {
-      document.addEventListener('mousedown', handleClickOutside);
-    }, 100);
-
-    return () => {
-      clearTimeout(timeoutId);
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [open]);
-
   const buildOpenTimeline = useCallback(() => {
     const panel = panelRef.current;
     const layers = preLayerElsRef.current;
@@ -337,10 +310,10 @@ export const StaggeredMenu = ({
     });
   }, []);
 
-  const handleLogout = useCallback(async () => {
+  const handleLogout = async () => {
     if (open) toggleMenu(); // Close menu if open
     await signOut({ callbackUrl: '/login' });
-  }, [open]);
+  };
 
   const toggleMenu = useCallback(() => {
     const target = !openRef.current;
@@ -368,6 +341,33 @@ export const StaggeredMenu = ({
     animateColor(target);
     animateText(target);
   }, [playOpen, playClose, animateIcon, animateColor, animateText, onMenuOpen, onMenuClose]);
+
+  // Close menu when clicking outside
+  useLayoutEffect(() => {
+    if (!open) return;
+
+    const handleClickOutside = (event) => {
+      const panel = panelRef.current;
+      const toggleBtn = toggleBtnRef.current;
+
+      // Check if click is outside both the panel and toggle button
+      if (panel && toggleBtn &&
+          !panel.contains(event.target) &&
+          !toggleBtn.contains(event.target)) {
+        toggleMenu();
+      }
+    };
+
+    // Add listener with a small delay to prevent immediate closure
+    const timeoutId = setTimeout(() => {
+      document.addEventListener('mousedown', handleClickOutside);
+    }, 100);
+
+    return () => {
+      clearTimeout(timeoutId);
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [open, toggleMenu]);
 
   return (
     <div

@@ -1576,7 +1576,7 @@ export default function AgentDetailModal({ agent, isOpen, onClose, onRunAgent })
                       className="h-[320px] w-full rounded-lg border border-border bg-background text-sm font-mono resize-none focus:ring-2 focus:ring-emerald-500/50"
                     />
                     <p className="text-xs text-muted-foreground">
-                      💡 Tip: You can customize the prompt to modify how the agent processes your content. Click "Done" when finished, then "Run Agent" to execute.
+                      💡 Tip: You can customize the prompt to modify how the agent processes your content. Click &quot;Done&quot; when finished, then &quot;Run Agent&quot; to execute.
                     </p>
                   </div>
                 ) : (

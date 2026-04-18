@@ -259,8 +259,8 @@ export default function CreativeAssistant({
               <>
                 <h4 className="font-medium text-foreground mb-1">{suggestion.character}</h4>
                 <div className="text-sm space-y-1">
-                  <p className="text-red-400/80 line-through">"{suggestion.originalLine}"</p>
-                  <p className="text-emerald-400">"{suggestion.suggestedLine}"</p>
+                  <p className="text-red-400/80 line-through">&quot;{suggestion.originalLine}&quot;</p>
+                  <p className="text-emerald-400">&quot;{suggestion.suggestedLine}&quot;</p>
                 </div>
               </>
             )}
@@ -345,7 +345,7 @@ export default function CreativeAssistant({
                   <span className="text-sm font-medium text-purple-400">Visual Ideation Preview</span>
                 </div>
                 <p className="text-xs text-muted-foreground mb-2 italic">
-                  Generate a quick visual to help you FEEL this scene's atmosphere and emotion
+                  Generate a quick visual to help you FEEL this scene&apos;s atmosphere and emotion
                 </p>
                 <p className="text-sm text-muted-foreground mb-3">{videoPrompt}</p>
 
@@ -478,7 +478,7 @@ export default function CreativeAssistant({
           {!suggestions && !isLoading && !error && (
             <div className="text-center text-muted-foreground py-8">
               <Sparkles className="w-8 h-8 mx-auto mb-2 opacity-50" />
-              <p>Enter scene text above and click "Get Suggestions"</p>
+              <p>Enter scene text above and click &quot;Get Suggestions&quot;</p>
             </div>
           )}
         </div>

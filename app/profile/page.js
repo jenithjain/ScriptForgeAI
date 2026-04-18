@@ -33,28 +33,14 @@ export default function ProfilePage() {
   const [keyStatus, setKeyStatus] = useState("idle"); // idle | saving | deleting | success | error
   const [keyError, setKeyError] = useState("");
 
-  useEffect(() => {
-    if (status === "unauthenticated") {
-      router.push("/login");
-    } else if (status === "authenticated") {
-      fetchAll();
-    }
-  }, [status, router]);
-
-  const fetchAll = async () => {
-    setLoading(true);
-    await Promise.all([fetchUserData(), fetchApiKeyStatus(), fetchStats()]);
-    setLoading(false);
-  };
-
-  const fetchUserData = async () => {
+  const fetchUserData = useCallback(async () => {
     try {
       const res = await fetch("/api/user/profile");
       if (res.ok) setUserData(await res.json());
     } catch (e) { console.error("Error fetching profile:", e); }
-  };
+  }, []);
 
-  const fetchApiKeyStatus = async () => {
+  const fetchApiKeyStatus = useCallback(async () => {
     try {
       const res = await fetch("/api/user/api-key");
       if (res.ok) {
@@ -64,9 +50,9 @@ export default function ProfilePage() {
         setHasApiKey(false);
       }
     } catch { setHasApiKey(false); }
-  };
+  }, []);
 
-  const fetchStats = async () => {
+  const fetchStats = useCallback(async () => {
     try {
       const res = await fetch("/api/dashboard/stats");
       if (res.ok) {
@@ -74,7 +60,25 @@ export default function ProfilePage() {
         if (data.success) setStats(data.stats);
       }
     } catch (e) { console.error("Error fetching stats:", e); }
-  };
+  }, []);
+
+  const fetchAll = useCallback(async () => {
+    setLoading(true);
+    await Promise.all([fetchUserData(), fetchApiKeyStatus(), fetchStats()]);
+    setLoading(false);
+  }, [fetchUserData, fetchApiKeyStatus, fetchStats]);
+
+  useEffect(() => {
+    if (status === "unauthenticated") {
+      router.push("/login");
+    } else if (status === "authenticated") {
+      const timer = setTimeout(() => {
+        fetchAll();
+      }, 0);
+
+      return () => clearTimeout(timer);
+    }
+  }, [status, router, fetchAll]);
 
   const handleSaveKey = async () => {
     if (!apiKeyInput.trim()) return;

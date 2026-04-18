@@ -41,7 +41,11 @@ export default function ApiKeyProvider({ children }) {
   }, []);
 
   useEffect(() => {
-    fetchStatus();
+    const timer = setTimeout(() => {
+      fetchStatus();
+    }, 0);
+
+    return () => clearTimeout(timer);
   }, [fetchStatus]);
 
   /**
@@ -64,11 +68,13 @@ export default function ApiKeyProvider({ children }) {
   return (
     <ApiKeyContext.Provider value={{ hasKey, ensureKey, openModal: () => setModalOpen(true) }}>
       {children}
-      <ApiKeyModal
-        open={modalOpen}
-        onOpenChange={setModalOpen}
-        onKeySaved={handleKeySaved}
-      />
+      {modalOpen && (
+        <ApiKeyModal
+          open={modalOpen}
+          onOpenChange={setModalOpen}
+          onKeySaved={handleKeySaved}
+        />
+      )}
     </ApiKeyContext.Provider>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useCallback } from "react";
 import {
   Dialog,
   DialogContent,
@@ -29,16 +29,6 @@ export default function ApiKeyModal({ open, onOpenChange, onKeySaved }) {
   const [showKey, setShowKey] = useState(false);
   const [status, setStatus] = useState("idle"); // idle | saving | success | error
   const [errorMsg, setErrorMsg] = useState("");
-
-  // Reset state when dialog opens
-  useEffect(() => {
-    if (open) {
-      setApiKey("");
-      setShowKey(false);
-      setStatus("idle");
-      setErrorMsg("");
-    }
-  }, [open]);
 
   const handleSave = useCallback(async () => {
     if (!apiKey.trim()) return;

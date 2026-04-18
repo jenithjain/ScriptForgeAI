@@ -4,20 +4,25 @@ import { useEffect, useState } from "react";
 
 const STORAGE_KEY = "theme";
 
+function getInitialTheme() {
+  if (typeof window === "undefined") return "light";
+
+  const saved = localStorage.getItem(STORAGE_KEY);
+  if (saved === "dark" || saved === "light") return saved;
+
+  if (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) {
+    return "dark";
+  }
+
+  return "light";
+}
+
 export default function ThemeToggle({ className = "" }) {
-  const [mounted, setMounted] = useState(false);
-  const [theme, setTheme] = useState("light");
+  const [theme, setTheme] = useState(getInitialTheme);
 
   useEffect(() => {
-    setMounted(true);
-    const saved = localStorage.getItem(STORAGE_KEY);
-    let initial = saved;
-    if (!initial) {
-      initial = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-    }
-    setTheme(initial);
-    document.documentElement.classList.toggle("dark", initial === "dark");
-  }, []);
+    document.documentElement.classList.toggle("dark", theme === "dark");
+  }, [theme]);
 
   const toggle = () => {
     const next = theme === "dark" ? "light" : "dark";
@@ -29,8 +34,6 @@ export default function ThemeToggle({ className = "" }) {
       document.cookie = `theme=${next}; path=/; max-age=${60 * 60 * 24 * 365}`;
     } catch {}
   };
-
-  if (!mounted) return null;
 
   return (
     <button
