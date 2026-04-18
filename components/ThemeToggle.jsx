@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useSyncExternalStore } from "react";
 
 const STORAGE_KEY = "theme";
+const THEME_EVENT = "scriptforge-theme-change";
 
-function getInitialTheme() {
+function getBrowserTheme() {
   if (typeof window === "undefined") return "light";
 
   const saved = localStorage.getItem(STORAGE_KEY);
@@ -17,22 +18,49 @@ function getInitialTheme() {
   return "light";
 }
 
+function subscribeTheme(callback) {
+  if (typeof window === "undefined") return () => {};
+
+  const media = window.matchMedia("(prefers-color-scheme: dark)");
+  const onChange = () => callback();
+
+  window.addEventListener(THEME_EVENT, onChange);
+  window.addEventListener("storage", onChange);
+  media.addEventListener("change", onChange);
+
+  return () => {
+    window.removeEventListener(THEME_EVENT, onChange);
+    window.removeEventListener("storage", onChange);
+    media.removeEventListener("change", onChange);
+  };
+}
+
 export default function ThemeToggle({ className = "" }) {
-  const [theme, setTheme] = useState(getInitialTheme);
+  const theme = useSyncExternalStore(
+    subscribeTheme,
+    getBrowserTheme,
+    () => "light"
+  );
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", theme === "dark");
   }, [theme]);
 
+  const setTheme = useCallback((nextTheme) => {
+    try {
+      localStorage.setItem(STORAGE_KEY, nextTheme);
+      document.cookie = `theme=${nextTheme}; path=/; max-age=${60 * 60 * 24 * 365}`;
+    } catch {}
+
+    document.documentElement.classList.toggle("dark", nextTheme === "dark");
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new Event(THEME_EVENT));
+    }
+  }, []);
+
   const toggle = () => {
     const next = theme === "dark" ? "light" : "dark";
     setTheme(next);
-    document.documentElement.classList.toggle("dark", next === "dark");
-    try {
-      localStorage.setItem(STORAGE_KEY, next);
-      // Persist to cookie so the server can render with the correct theme
-      document.cookie = `theme=${next}; path=/; max-age=${60 * 60 * 24 * 365}`;
-    } catch {}
   };
 
   return (
