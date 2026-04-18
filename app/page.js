@@ -7,18 +7,75 @@ import StaggeredMenu from "@/components/StaggeredMenu";
 import ModelViewer from "@/components/ModelViewer";
 import LaserFlow from "@/components/LaserFlow";
 import Footer from "@/components/Footer";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
-  BookOpen, Brain, Sparkles, GitBranch, Search, FileText,
-  Zap, Shield, Users, Network
+  Brain, Sparkles, Search, FileText, Shield, Users
 } from "lucide-react";
+
+const FEATURE_ICON_MAP = {
+  brain: Brain,
+  shield: Shield,
+  sparkles: Sparkles,
+  search: Search,
+  fileText: FileText,
+  users: Users,
+};
+
+const FEATURE_ITEMS = [
+  {
+    icon: "brain",
+    iconContainerClass: "bg-emerald-500/10 group-hover:bg-emerald-500",
+    iconClass: "text-emerald-500 group-hover:text-white",
+    title: "Knowledge Graph Story Memory",
+    description:
+      "Dynamic knowledge graph tracks all story entities and relationships - characters, locations, objects, events, and timelines evolve as your story progresses",
+  },
+  {
+    icon: "shield",
+    iconContainerClass: "bg-blue-500/10 group-hover:bg-blue-500",
+    iconClass: "text-blue-500 group-hover:text-white",
+    title: "Continuity Validation System",
+    description:
+      "Intelligent consistency checking detects contradictions from simple errors to complex timeline issues while recognizing intentional narrative devices",
+  },
+  {
+    icon: "sparkles",
+    iconContainerClass: "bg-purple-500/10 group-hover:bg-purple-500",
+    iconClass: "text-purple-500 group-hover:text-white",
+    title: "AI Creative Assistant",
+    description:
+      "Intelligent creative support suggests scene ideas, dialogue enhancements, and plot developments that match your established style and vision",
+  },
+  {
+    icon: "search",
+    iconContainerClass: "bg-amber-500/10 group-hover:bg-amber-500",
+    iconClass: "text-amber-500 group-hover:text-white",
+    title: "Intelligent Recall & Navigation",
+    description:
+      "Ask questions in natural language about any story element and receive precise answers with passage references and automated summaries",
+  },
+  {
+    icon: "fileText",
+    iconContainerClass: "bg-red-500/10 group-hover:bg-red-500",
+    iconClass: "text-red-500 group-hover:text-white",
+    title: "Multi-Format Support",
+    description:
+      "Compatible with screenplays, novels, episodic scripts, and mixed formats - adapts to your writing style and genre conventions",
+  },
+  {
+    icon: "users",
+    iconContainerClass: "bg-teal-500/10 group-hover:bg-teal-500",
+    iconClass: "text-teal-500 group-hover:text-white",
+    title: "Collaboration Support",
+    description:
+      "Shared story knowledge base for writing teams with collaborative editing and role-based permissions for different contributors",
+  },
+];
 
 export default function Home() {
   const modelUrl = "/models/paladins_book.glb";
   const [menuBtnColor, setMenuBtnColor] = useState('#000000');
   const [isDarkMode, setIsDarkMode] = useState(false);
-  const [modelKey, setModelKey] = useState(Date.now());
   const pathname = usePathname();
   const { data: session } = useSession();
 
@@ -41,14 +98,6 @@ export default function Home() {
     
     return () => observer.disconnect();
   }, []);
-
-  // Force remount ModelViewer when returning to home page
-  useEffect(() => {
-    if (pathname === '/') {
-      // Use timestamp to force complete remount
-      setModelKey(Date.now());
-    }
-  }, [pathname]);
 
   return (
   <main className="relative min-h-screen w-full">
@@ -108,7 +157,7 @@ export default function Home() {
             </p>
             <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-3 sm:gap-4 w-full sm:w-auto">
               <a
-                href="#get-started"
+                href="/login"
                 className="rounded-xl bg-emerald-500 px-5 sm:px-6 py-2.5 sm:py-3 text-sm font-semibold text-white shadow-lg hover:shadow-xl shadow-emerald-500/20 hover:shadow-emerald-500/30 transition-all hover:bg-emerald-600 text-center backdrop-blur-sm"
               >
                 Get Started
@@ -127,7 +176,7 @@ export default function Home() {
             <div className="rounded-2xl shadow-lg overflow-hidden">
               <div className="w-full aspect-square max-w-[570px] mx-auto">
                 <ModelViewer
-                  key={modelKey}
+                  key={pathname}
                   url={modelUrl}
                   defaultRotationX={10}
                   defaultZoom={1.0}
@@ -176,9 +225,12 @@ export default function Home() {
                   <p className="text-lg text-slate-700 dark:text-slate-200 mb-5">
                     Maintains deep context awareness across your entire manuscript, automatically tracking characters, locations, events, and relationships as you write. Never lose track of story details again.
                   </p>
-                  <button className="px-6 py-3 bg-emerald-600 hover:bg-emerald-700 dark:bg-white dark:hover:bg-slate-100 text-white dark:text-slate-900 rounded-xl font-semibold transition-all hover:scale-105 shadow-lg">
+                  <a
+                    href="/login"
+                    className="inline-block px-6 py-3 bg-emerald-600 hover:bg-emerald-700 dark:bg-white dark:hover:bg-slate-100 text-white dark:text-slate-900 rounded-xl font-semibold transition-all hover:scale-105 shadow-lg"
+                  >
                     Start Writing
-                  </button>
+                  </a>
                 </div>
               </div>
 
@@ -202,95 +254,23 @@ export default function Home() {
 
           {/* Features Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {/* Feature 1 */}
-            <Card className="group hover:shadow-xl transition-all duration-300 hover:scale-105 border-border/40 backdrop-blur-sm bg-card/50 cursor-pointer">
-              <CardHeader>
-                <div className="w-12 h-12 rounded-xl bg-emerald-500/10 flex items-center justify-center mb-4 group-hover:bg-emerald-500 transition-colors">
-                  <Brain className="h-6 w-6 text-emerald-500 group-hover:text-white transition-colors" />
-                </div>
-                <CardTitle className="text-xl ivy-font">Knowledge Graph Story Memory</CardTitle>
-                <CardDescription className="ivy-font">
-                  Dynamic knowledge graph tracks all story entities and relationships - characters, locations, objects, events, and timelines evolve as your story progresses
-                </CardDescription>
-              </CardHeader>
-            </Card>
-
-            {/* Feature 2 */}
-            <Card className="group hover:shadow-xl transition-all duration-300 hover:scale-105 border-border/40 backdrop-blur-sm bg-card/50 cursor-pointer">
-              <CardHeader>
-                <div className="w-12 h-12 rounded-xl bg-blue-500/10 flex items-center justify-center mb-4 group-hover:bg-blue-500 transition-colors">
-                  <Shield className="h-6 w-6 text-blue-500 group-hover:text-white transition-colors" />
-                </div>
-                <CardTitle className="text-xl ivy-font">Continuity Validation System</CardTitle>
-                <CardDescription className="ivy-font">
-                  Intelligent consistency checking detects contradictions from simple errors to complex timeline issues while recognizing intentional narrative devices
-                </CardDescription>
-              </CardHeader>
-            </Card>
-
-            {/* Feature 3 */}
-            <Card className="group hover:shadow-xl transition-all duration-300 hover:scale-105 border-border/40 backdrop-blur-sm bg-card/50 cursor-pointer">
-              <CardHeader>
-                <div className="w-12 h-12 rounded-xl bg-purple-500/10 flex items-center justify-center mb-4 group-hover:bg-purple-500 transition-colors">
-                  <Sparkles className="h-6 w-6 text-purple-500 group-hover:text-white transition-colors" />
-                </div>
-                <CardTitle className="text-xl ivy-font">AI Creative Assistant</CardTitle>
-                <CardDescription className="ivy-font">
-                  Intelligent creative support suggests scene ideas, dialogue enhancements, and plot developments that match your established style and vision
-                </CardDescription>
-              </CardHeader>
-            </Card>
-
-            {/* Feature 4 */}
-            <Card className="group hover:shadow-xl transition-all duration-300 hover:scale-105 border-border/40 backdrop-blur-sm bg-card/50 cursor-pointer">
-              <CardHeader>
-                <div className="w-12 h-12 rounded-xl bg-amber-500/10 flex items-center justify-center mb-4 group-hover:bg-amber-500 transition-colors">
-                  <Search className="h-6 w-6 text-amber-500 group-hover:text-white transition-colors" />
-                </div>
-                <CardTitle className="text-xl ivy-font">Intelligent Recall & Navigation</CardTitle>
-                <CardDescription className="ivy-font">
-                  Ask questions in natural language about any story element and receive precise answers with passage references and automated summaries
-                </CardDescription>
-              </CardHeader>
-            </Card>
-
-            {/* Feature 5 */}
-            <Card className="group hover:shadow-xl transition-all duration-300 hover:scale-105 border-border/40 backdrop-blur-sm bg-card/50 cursor-pointer">
-              <CardHeader>
-                <div className="w-12 h-12 rounded-xl bg-red-500/10 flex items-center justify-center mb-4 group-hover:bg-red-500 transition-colors">
-                  <FileText className="h-6 w-6 text-red-500 group-hover:text-white transition-colors" />
-                </div>
-                <CardTitle className="text-xl ivy-font">Multi-Format Support</CardTitle>
-                <CardDescription className="ivy-font">
-                  Compatible with screenplays, novels, episodic scripts, and mixed formats - adapts to your writing style and genre conventions
-                </CardDescription>
-              </CardHeader>
-            </Card>
-
-            {/* Feature 6 */}
-            <Card className="group hover:shadow-xl transition-all duration-300 hover:scale-105 border-border/40 backdrop-blur-sm bg-card/50 cursor-pointer">
-              <CardHeader>
-                <div className="w-12 h-12 rounded-xl bg-teal-500/10 flex items-center justify-center mb-4 group-hover:bg-teal-500 transition-colors">
-                  <Users className="h-6 w-6 text-teal-500 group-hover:text-white transition-colors" />
-                </div>
-                <CardTitle className="text-xl ivy-font">Collaboration Support</CardTitle>
-                <CardDescription className="ivy-font">
-                  Shared story knowledge base for writing teams with collaborative editing and role-based permissions for different contributors
-                </CardDescription>
-              </CardHeader>
-            </Card>
-          </div>
-
-          {/* CTA Section */}
-          <div className="mt-16 text-center">
-            <div className="inline-flex flex-col sm:flex-row gap-4">
-              <button className="px-8 py-4 bg-emerald-500 text-white rounded-xl font-semibold hover:bg-emerald-600 transition-all hover:scale-105 shadow-lg hover:shadow-xl">
-                Start Free Trial
-              </button>
-              <button className="px-8 py-4 bg-transparent border-2 border-border text-foreground rounded-xl font-semibold hover:bg-muted transition-all hover:scale-105">
-                Schedule Demo
-              </button>
-            </div>
+            {FEATURE_ITEMS.map((feature) => {
+              const Icon = FEATURE_ICON_MAP[feature.icon];
+              return (
+                <Card
+                  key={feature.title}
+                  className="group hover:shadow-xl transition-all duration-300 hover:scale-105 border-border/40 backdrop-blur-sm bg-card/50 cursor-pointer"
+                >
+                  <CardHeader>
+                    <div className={`w-12 h-12 rounded-xl flex items-center justify-center mb-4 transition-colors ${feature.iconContainerClass}`}>
+                      {Icon ? <Icon className={`h-6 w-6 transition-colors ${feature.iconClass}`} /> : null}
+                    </div>
+                    <CardTitle className="text-xl ivy-font">{feature.title}</CardTitle>
+                    <CardDescription className="ivy-font">{feature.description}</CardDescription>
+                  </CardHeader>
+                </Card>
+              );
+            })}
           </div>
         </div>
       </section>

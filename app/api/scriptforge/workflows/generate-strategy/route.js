@@ -64,13 +64,20 @@ Return ONLY the strategy text, no JSON formatting needed.`;
 
   } catch (error) {
     console.error('Error generating strategy:', error);
+
+    const message = error?.message || 'Failed to generate strategy';
+    const isGeminiAuthError =
+      message.toLowerCase().includes('api key') ||
+      message.toLowerCase().includes('expired') ||
+      message.toLowerCase().includes('invalid');
+
     return NextResponse.json(
       { 
         success: false, 
-        error: error.message || 'Failed to generate strategy',
+        error: message,
         strategy: 'This workflow orchestrates multiple AI agents to ensure story continuity, track narrative elements, and provide intelligent writing assistance.'
       },
-      { status: 500 }
+      { status: isGeminiAuthError ? 422 : 500 }
     );
   }
 }

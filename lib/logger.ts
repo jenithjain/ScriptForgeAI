@@ -11,13 +11,17 @@
  */
 
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 
 // ============================================================================
 // CONFIGURATION
 // ============================================================================
 
-const LOG_DIR = path.join(process.cwd(), 'logs');
+const IS_SERVERLESS = !!process.env.VERCEL || !!process.env.AWS_LAMBDA_FUNCTION_NAME;
+const LOG_DIR = IS_SERVERLESS
+  ? path.join(os.tmpdir(), 'scriptforge-logs')
+  : path.join(process.cwd(), 'logs');
 const MAX_LOG_FILES = 30; // Keep last 30 days of logs
 const MAX_LOG_SIZE_MB = 10; // Max size per log file
 
@@ -60,6 +64,11 @@ const MIN_LOG_LEVEL: LogLevel = (process.env.LOG_LEVEL as LogLevel) ||
 // ============================================================================
 
 function ensureLogDir(): void {
+  if (IS_SERVERLESS) {
+    // Vercel/serverless runtimes expose a read-only deployment directory.
+    // Use the writable temp directory instead so imports do not crash.
+  }
+
   if (!fs.existsSync(LOG_DIR)) {
     fs.mkdirSync(LOG_DIR, { recursive: true });
   }
@@ -134,6 +143,31 @@ function cleanupOldLogs(): void {
 // ============================================================================
 
 function writeLog(entry: LogEntry, category: string = 'app'): void {
+  if (IS_SERVERLESS) {
+    try {
+      ensureLogDir();
+      const logFile = getLogFileName(category);
+      const logDir = path.dirname(logFile);
+      if (!fs.existsSync(logDir)) {
+        fs.mkdirSync(logDir, { recursive: true });
+      }
+
+      const logLine = JSON.stringify(entry) + '\n';
+      fs.appendFileSync(logFile, logLine, 'utf8');
+      if (entry.level === 'error') {
+        const errorLogFile = getErrorLogFileName();
+        const errorDir = path.dirname(errorLogFile);
+        if (!fs.existsSync(errorDir)) {
+          fs.mkdirSync(errorDir, { recursive: true });
+        }
+        fs.appendFileSync(errorLogFile, logLine, 'utf8');
+      }
+    } catch (err) {
+      console.error('Failed to write serverless log:', err);
+    }
+    return;
+  }
+
   ensureLogDir();
   
   const logFile = getLogFileName(category);
@@ -541,8 +575,10 @@ export function createLogger(category: string): Logger {
 // Ensure log directory exists on module load
 ensureLogDir();
 
-// Run cleanup on startup (async, non-blocking)
-setTimeout(() => cleanupOldLogs(), 5000);
+// Run cleanup on startup (async, non-blocking) only in persistent local/runtime filesystems
+if (!IS_SERVERLESS) {
+  setTimeout(() => cleanupOldLogs(), 5000);
+}
 
 // Export types
 export type { LogLevel, LogEntry, AgentExecutionLog };

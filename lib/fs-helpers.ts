@@ -1,7 +1,12 @@
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 
-export const TMP_DIR = path.join(process.cwd(), 'tmp', 'campaign-images');
+const IS_SERVERLESS = !!process.env.VERCEL || !!process.env.AWS_LAMBDA_FUNCTION_NAME;
+
+export const TMP_DIR = IS_SERVERLESS
+  ? path.join(os.tmpdir(), 'scriptforge-campaign-images')
+  : path.join(process.cwd(), 'tmp', 'campaign-images');
 
 export function ensureTmpDir() {
   if (!fs.existsSync(TMP_DIR)) {

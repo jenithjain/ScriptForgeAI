@@ -16,6 +16,40 @@ function deepClone(obj) {
 }
 
 /**
+ * Persist workflow fields atomically to avoid stale-document VersionError collisions.
+ */
+async function persistWorkflow(workflowId, fields) {
+  const result = await ScriptWorkflow.updateOne(
+    { _id: workflowId },
+    { $set: fields }
+  );
+
+  if (!result.matchedCount) {
+    throw new Error('Workflow not found while persisting updates');
+  }
+}
+
+/**
+ * Persist a single node's data using positional operator to avoid rewriting
+ * the full nodes array during concurrent agent execution.
+ */
+async function persistNodeData(workflowId, nodeId, nodeData, extraFields = {}) {
+  const result = await ScriptWorkflow.updateOne(
+    { _id: workflowId, 'nodes.id': nodeId },
+    {
+      $set: {
+        'nodes.$.data': nodeData,
+        ...extraFields,
+      },
+    }
+  );
+
+  if (!result.matchedCount) {
+    throw new Error(`Workflow node not found while persisting updates: ${nodeId}`);
+  }
+}
+
+/**
  * Execute a single agent within a workflow
  */
 async function executeSingleAgent(workflow, nodeId, agentType, customPrompt = null, apiKey = null) {
@@ -71,10 +105,8 @@ async function executeSingleAgent(workflow, nodeId, agentType, customPrompt = nu
       node.data.customPrompt = customPrompt;
     }
 
-    // Reassign the entire nodes array to ensure Mongoose detects the change
-    workflow.nodes = nodesClone;
-    workflow.markModified('nodes');
-    await workflow.save();
+    // Persist only the targeted node atomically to avoid version conflicts
+    await persistNodeData(workflow._id, nodeId, node.data);
     console.log(`Saved workflow with node ${nodeId} status: running`);
 
     // Execute the agent
@@ -83,8 +115,11 @@ async function executeSingleAgent(workflow, nodeId, agentType, customPrompt = nu
 
     const { result, updatedContext } = await executeAgent(effectiveAgentType, agentContext);
 
-    // Update node with results - re-clone to get fresh state
-    nodesClone = deepClone(workflow.nodes);
+    // Reload latest nodes from DB to avoid overwriting concurrent updates
+    const latestNodesWorkflow = await ScriptWorkflow.findById(workflow._id)
+      .select('nodes analysisContext')
+      .lean();
+    nodesClone = deepClone(latestNodesWorkflow?.nodes || []);
     const updatedNode = nodesClone.find(n => n.id === nodeId);
     if (updatedNode) {
       updatedNode.data.status = 'success';
@@ -98,19 +133,15 @@ async function executeSingleAgent(workflow, nodeId, agentType, customPrompt = nu
       };
     }
 
-    // Update workflow analysis context
+    // Merge with latest context from DB to avoid overwriting concurrent updates
     const newAnalysisContext = {
-      ...(workflow.analysisContext || {}),
+      ...(latestNodesWorkflow?.analysisContext || {}),
       ...updatedContext
     };
 
-    // Reassign arrays/objects completely to force Mongoose to detect changes
-    workflow.nodes = nodesClone;
-    workflow.analysisContext = newAnalysisContext;
-    workflow.markModified('nodes');
-    workflow.markModified('analysisContext');
-
-    await workflow.save();
+    await persistNodeData(workflow._id, nodeId, updatedNode?.data || node.data, {
+      analysisContext: newAnalysisContext,
+    });
     console.log(`Saved workflow with node ${nodeId} status: success, result keys:`, result ? Object.keys(result) : 'null');
 
     // Convert to plain object for response - use updatedNode which has the result
@@ -135,14 +166,15 @@ async function executeSingleAgent(workflow, nodeId, agentType, customPrompt = nu
 
     // Update node with error using deep clone approach
     try {
-      const errorNodesClone = deepClone(workflow.nodes);
+      const latestErrorWorkflow = await ScriptWorkflow.findById(workflow._id)
+        .select('nodes')
+        .lean();
+      const errorNodesClone = deepClone(latestErrorWorkflow?.nodes || []);
       const errorNode = errorNodesClone.find(n => n.id === nodeId);
       if (errorNode) {
         errorNode.data.status = 'error';
         errorNode.data.error = error.message;
-        workflow.nodes = errorNodesClone;
-        workflow.markModified('nodes');
-        await workflow.save();
+        await persistNodeData(workflow._id, nodeId, errorNode.data);
         console.log(`Saved workflow with node ${nodeId} status: error`);
       }
     } catch (saveError) {
@@ -212,9 +244,12 @@ export async function POST(req) {
       errors: []
     };
     workflow.nodes = nodesClone;
-    workflow.markModified('nodes');
-    workflow.markModified('progress');
-    await workflow.save();
+    await persistWorkflow(workflow._id, {
+      status: workflow.status,
+      lastRun: workflow.lastRun,
+      progress: workflow.progress,
+      nodes: workflow.nodes
+    });
 
     // Execute workflow nodes sequentially using the specialized agent executor
     const results = [];
@@ -236,9 +271,10 @@ export async function POST(req) {
         node.data.status = 'running';
         workflow.progress.currentNode = node.id;
         workflow.nodes = deepClone(nodesClone);
-        workflow.markModified('nodes');
-        workflow.markModified('progress');
-        await workflow.save();
+        await persistWorkflow(workflow._id, {
+          progress: workflow.progress,
+          nodes: workflow.nodes
+        });
 
         const agentType = node.data.agentType;
         const agentDef = AGENT_DEFINITIONS[agentType];
@@ -283,9 +319,10 @@ export async function POST(req) {
         });
         // Save on error to persist partial progress before continuing
         workflow.nodes = deepClone(nodesClone);
-        workflow.markModified('nodes');
-        workflow.markModified('progress');
-        await workflow.save();
+        await persistWorkflow(workflow._id, {
+          progress: workflow.progress,
+          nodes: workflow.nodes
+        });
         // Continue to next agent instead of breaking - allow partial success
         continue;
       }
@@ -302,15 +339,19 @@ export async function POST(req) {
 
     // Final save with all nodes including their results
     workflow.nodes = deepClone(nodesClone);
-    workflow.markModified('nodes');
-    workflow.markModified('progress');
-    workflow.markModified('analysisContext');
-    await workflow.save();
+    await persistWorkflow(workflow._id, {
+      status: workflow.status,
+      progress: workflow.progress,
+      analysisContext: workflow.analysisContext,
+      nodes: workflow.nodes
+    });
     console.log('Final workflow save complete. Nodes with results:', nodesClone.filter(n => n.data.result).length);
+
+    const persistedWorkflow = await ScriptWorkflow.findById(workflow._id);
 
     return NextResponse.json({
       success: !allFailed,
-      workflow,
+      workflow: persistedWorkflow || workflow,
       results,
       summary: generateExecutionSummary(results, agentContext)
     });

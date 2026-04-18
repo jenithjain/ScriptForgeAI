@@ -35,6 +35,22 @@ const genAI = new Proxy({} as GoogleGenerativeAI, {
 // Default timeout for Gemini API calls (120 seconds for complex agents)
 const DEFAULT_GEMINI_TIMEOUT_MS = 120000;
 
+function isGeminiAuthError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+
+  const message = error.message.toLowerCase();
+  return (
+    message.includes('api key expired') ||
+    message.includes('api key invalid') ||
+    message.includes('invalid api key') ||
+    message.includes('unauthorized') ||
+    message.includes('permission denied') ||
+    message.includes('api_key_invalid') ||
+    message.includes('401') ||
+    message.includes('403')
+  );
+}
+
 /**
  * Wrap a promise with a timeout
  */
@@ -160,6 +176,12 @@ export async function generateWithRetry(
     } catch (error) {
       lastError = error as Error;
       console.error(`Attempt ${i + 1} failed:`, error);
+
+      if (isGeminiAuthError(error)) {
+        throw new Error(
+          'Gemini API key is invalid or expired. Update GOOGLE_GEMINI_API_KEY or GEMINI_API_KEY in .env.local, or save a new key in Profile.'
+        );
+      }
       
       // On timeout, try once more with same timeout (might be temporary network issue)
       // but don't retry more than once for timeouts
