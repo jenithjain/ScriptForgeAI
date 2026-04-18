@@ -10,7 +10,14 @@
  * - Never overwrite state; always append new state nodes
  */
 
-import { runQuery, runWriteTransaction, initializeSchema, getSession } from '@/lib/neo4j';
+import {
+  runQuery,
+  runWriteTransaction,
+  initializeSchema,
+  getSession,
+  isNeo4jAvailable,
+  isNeo4jConnectionError,
+} from '@/lib/neo4j';
 import type {
   StoryAnalysisResult,
   Character,
@@ -72,6 +79,11 @@ const NODE_SIZES: Record<string, number> = {
  * Initialize the Neo4j schema
  */
 export async function initializeGraphSchema(): Promise<void> {
+  if (!(await isNeo4jAvailable())) {
+    console.warn('[Story Graph] Neo4j unavailable. Schema initialization skipped.');
+    return;
+  }
+
   await initializeSchema();
 }
 
@@ -88,7 +100,13 @@ async function storeChapter(analysis: StoryAnalysisResult): Promise<void> {
           ch.summary = $summary,
           ch.mood = $mood,
           ch.tension = $tension,
-          ch.workflowId = $workflowId
+          ch.workflowId = $workflowId,
+          ch.workflowIds = CASE
+            WHEN $workflowId IS NULL THEN coalesce(ch.workflowIds, [])
+            WHEN ch.workflowIds IS NULL THEN [$workflowId]
+            WHEN $workflowId IN ch.workflowIds THEN ch.workflowIds
+            ELSE ch.workflowIds + $workflowId
+          END
     `, {
       id: analysis.chapterId,
       number: analysis.chapterNumber,
@@ -115,6 +133,12 @@ async function storeCharacters(characters: Character[], chapterId: string, versi
             c.role = $role,
             c.description = $description,
             c.workflowId = $workflowId,
+            c.workflowIds = CASE
+              WHEN $workflowId IS NULL THEN coalesce(c.workflowIds, [])
+              WHEN c.workflowIds IS NULL THEN [$workflowId]
+              WHEN $workflowId IN c.workflowIds THEN c.workflowIds
+              ELSE c.workflowIds + $workflowId
+            END,
             c.lastUpdated = datetime()
         WITH c
         MATCH (ch:Chapter { id: $chapterId })
@@ -165,6 +189,12 @@ async function storeLocations(locations: Location[], chapterId: string, workflow
             l.type = $type,
             l.description = $description,
             l.workflowId = $workflowId,
+            l.workflowIds = CASE
+              WHEN $workflowId IS NULL THEN coalesce(l.workflowIds, [])
+              WHEN l.workflowIds IS NULL THEN [$workflowId]
+              WHEN $workflowId IN l.workflowIds THEN l.workflowIds
+              ELSE l.workflowIds + $workflowId
+            END,
             l.lastUpdated = datetime()
         WITH l
         MATCH (ch:Chapter { id: $chapterId })
@@ -206,6 +236,12 @@ async function storeObjects(objects: StoryObject[], chapterId: string, workflowI
             o.description = $description,
             o.significance = $significance,
             o.workflowId = $workflowId,
+            o.workflowIds = CASE
+              WHEN $workflowId IS NULL THEN coalesce(o.workflowIds, [])
+              WHEN o.workflowIds IS NULL THEN [$workflowId]
+              WHEN $workflowId IN o.workflowIds THEN o.workflowIds
+              ELSE o.workflowIds + $workflowId
+            END,
             o.lastUpdated = datetime()
         WITH o
         MATCH (ch:Chapter { id: $chapterId })
@@ -250,6 +286,12 @@ async function storeEvents(events: Event[], chapterId: string, workflowId?: stri
             e.temporalType = $temporalType,
             e.timestamp = $timestamp,
             e.workflowId = $workflowId,
+            e.workflowIds = CASE
+              WHEN $workflowId IS NULL THEN coalesce(e.workflowIds, [])
+              WHEN e.workflowIds IS NULL THEN [$workflowId]
+              WHEN $workflowId IN e.workflowIds THEN e.workflowIds
+              ELSE e.workflowIds + $workflowId
+            END,
             e.lastUpdated = datetime()
         WITH e
         MATCH (ch:Chapter { id: $chapterId })
@@ -305,6 +347,12 @@ async function storePlotThreads(plotThreads: PlotThread[], chapterId: string, wo
             p.description = $description,
             p.status = $status,
             p.workflowId = $workflowId,
+            p.workflowIds = CASE
+              WHEN $workflowId IS NULL THEN coalesce(p.workflowIds, [])
+              WHEN p.workflowIds IS NULL THEN [$workflowId]
+              WHEN $workflowId IN p.workflowIds THEN p.workflowIds
+              ELSE p.workflowIds + $workflowId
+            END,
             p.lastUpdated = datetime()
         WITH p
         MATCH (ch:Chapter { id: $chapterId })
@@ -406,6 +454,13 @@ async function storeStateChanges(stateChanges: StateChange[], chapterId: string,
  */
 export async function updateGraph(analysis: StoryAnalysisResult, replaceGraph: boolean = false): Promise<{ success: boolean; message: string }> {
   try {
+    if (!(await isNeo4jAvailable())) {
+      return {
+        success: false,
+        message: 'Neo4j is unavailable. Graph update skipped.',
+      };
+    }
+
     const workflowId = analysis.workflowId;
 
     // If replaceGraph is true, clear existing graph data for this workflow
@@ -441,6 +496,10 @@ export async function updateGraph(analysis: StoryAnalysisResult, replaceGraph: b
  */
 export async function getGraphOverview(workflowId?: string): Promise<GraphData> {
   try {
+    if (!(await isNeo4jAvailable())) {
+      return { nodes: [], edges: [] };
+    }
+
     const session = getSession();
 
     try {
@@ -453,7 +512,11 @@ export async function getGraphOverview(workflowId?: string): Promise<GraphData> 
         nodesQuery = `
           MATCH (n)
           WHERE (n:Character OR n:Location OR n:Object OR n:Event OR n:PlotThread OR n:Chapter)
-          AND (n.workflowId = $workflowId OR n.id STARTS WITH 'workflow-' + $workflowId)
+          AND (
+            n.workflowId = $workflowId
+            OR (exists(n.workflowIds) AND $workflowId IN n.workflowIds)
+            OR n.id STARTS WITH 'workflow-' + $workflowId
+          )
           RETURN n, labels(n) as labels
         `;
         nodesParams = { workflowId };
@@ -530,7 +593,11 @@ export async function getGraphOverview(workflowId?: string): Promise<GraphData> 
       await session.close();
     }
   } catch (error) {
-    console.error('Failed to get graph overview:', error);
+    if (isNeo4jConnectionError(error)) {
+      console.warn('[Story Graph] Graph overview unavailable due to Neo4j connectivity issues.');
+    } else {
+      console.error('Failed to get graph overview:', error);
+    }
     return { nodes: [], edges: [] };
   }
 }
@@ -540,6 +607,10 @@ export async function getGraphOverview(workflowId?: string): Promise<GraphData> 
  */
 export async function getGraphByChapter(chapterNumber: number): Promise<GraphData> {
   try {
+    if (!(await isNeo4jAvailable())) {
+      return { nodes: [], edges: [] };
+    }
+
     const session = getSession();
 
     try {
@@ -678,7 +749,11 @@ export async function getGraphByChapter(chapterNumber: number): Promise<GraphDat
       await session.close();
     }
   } catch (error) {
-    console.error('Failed to get graph by chapter:', error);
+    if (isNeo4jConnectionError(error)) {
+      console.warn('[Story Graph] Chapter graph unavailable due to Neo4j connectivity issues.');
+    } else {
+      console.error('Failed to get graph by chapter:', error);
+    }
     return { nodes: [], edges: [] };
   }
 }
@@ -688,6 +763,10 @@ export async function getGraphByChapter(chapterNumber: number): Promise<GraphDat
  */
 export async function getAllChapters(): Promise<{ id: string; number: number; summary: string }[]> {
   try {
+    if (!(await isNeo4jAvailable())) {
+      return [];
+    }
+
     const results = await runQuery<any>(`
       MATCH (ch:Chapter)
       RETURN ch.id as id, ch.number as number, ch.summary as summary
@@ -700,7 +779,11 @@ export async function getAllChapters(): Promise<{ id: string; number: number; su
       summary: r.summary || ''
     }));
   } catch (error) {
-    console.error('Failed to get chapters:', error);
+    if (isNeo4jConnectionError(error)) {
+      console.warn('[Story Graph] Chapters unavailable due to Neo4j connectivity issues.');
+    } else {
+      console.error('Failed to get chapters:', error);
+    }
     return [];
   }
 }
@@ -709,12 +792,19 @@ export async function getAllChapters(): Promise<{ id: string; number: number; su
  * Clear all data from the graph (use with caution!)
  */
 export async function clearGraph(workflowId?: string): Promise<void> {
+  if (!(await isNeo4jAvailable())) {
+    console.warn('[Story Graph] Clear graph skipped because Neo4j is unavailable.');
+    return;
+  }
+
   await runWriteTransaction(async (tx) => {
     if (workflowId) {
       // Clear only data for the specific workflow
       await tx.run(`
         MATCH (n)
-        WHERE n.workflowId = $workflowId OR n.id STARTS WITH 'workflow-' + $workflowId
+        WHERE n.workflowId = $workflowId
+           OR (exists(n.workflowIds) AND $workflowId IN n.workflowIds)
+           OR n.id STARTS WITH 'workflow-' + $workflowId
         DETACH DELETE n
       `, { workflowId });
     } else {
@@ -729,6 +819,10 @@ export async function clearGraph(workflowId?: string): Promise<void> {
  */
 export async function getCharacterTimeline(characterId: string): Promise<any[]> {
   try {
+    if (!(await isNeo4jAvailable())) {
+      return [];
+    }
+
     const results = await runQuery(`
       MATCH (c:Character { id: $characterId })-[:HAS_STATE]->(s:State)
       RETURN s
@@ -737,7 +831,11 @@ export async function getCharacterTimeline(characterId: string): Promise<any[]> 
 
     return results.map(r => r.s.properties);
   } catch (error) {
-    console.error('Failed to get character timeline:', error);
+    if (isNeo4jConnectionError(error)) {
+      console.warn('[Story Graph] Character timeline unavailable due to Neo4j connectivity issues.');
+    } else {
+      console.error('Failed to get character timeline:', error);
+    }
     return [];
   }
 }

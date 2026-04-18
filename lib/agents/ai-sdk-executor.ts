@@ -315,8 +315,8 @@ async function storeKnowledgeGraphInNeo4j(
 
   try {
     const chapterId = context.workflowId ? `workflow-${context.workflowId}` : 'workflow-analysis';
-    
-    await updateGraph({
+
+    const storeResult = await updateGraph({
       chapterId,
       chapterNumber: 1,
       summary: context.storyBrief.substring(0, 200),
@@ -359,6 +359,12 @@ async function storeKnowledgeGraphInNeo4j(
         tension: 'medium' as const
       }
     });
+
+    if (!storeResult.success) {
+      console.warn('[AI SDK Executor] Neo4j storage skipped/failed:', storeResult.message);
+      return;
+    }
+
     console.log('[AI SDK Executor] Neo4j storage successful');
   } catch (error) {
     console.warn('[AI SDK Executor] Neo4j storage failed (non-fatal):', error);

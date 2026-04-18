@@ -91,6 +91,7 @@ export default function StoryKnowledgeGraphPage() {
 function StoryKnowledgeGraphContent() {
   const searchParams = useSearchParams();
   const workflowId = searchParams?.get('workflowId') ?? null;
+  const demoDataEnabled = process.env.NEXT_PUBLIC_ENABLE_STORY_GRAPH_DEMO === 'true';
   
   const fgRef = useRef<any>(null);
   const fg2DRef = useRef<any>(null);
@@ -107,6 +108,7 @@ function StoryKnowledgeGraphContent() {
   const [stats, setStats] = useState<Record<string, number>>({});
   const [isGeneratingDemo, setIsGeneratingDemo] = useState(false);
   const [workflowName, setWorkflowName] = useState<string | null>(null);
+  const [graphWarning, setGraphWarning] = useState<string | null>(null);
 
   // Fetch graph data
   const fetchGraphData = useCallback(async (chapterNumber?: number) => {
@@ -125,6 +127,8 @@ function StoryKnowledgeGraphContent() {
       const data = await response.json();
       
       if (data.success) {
+        setGraphWarning(data.warning || null);
+
         // Transform edges for force-graph (expects links with source/target as strings)
         const transformedData = {
           nodes: data.data.nodes.map((node: GraphNode) => ({
@@ -159,7 +163,10 @@ function StoryKnowledgeGraphContent() {
   // Fetch chapters list
   const fetchChapters = useCallback(async () => {
     try {
-      const response = await fetch('/api/story-graph/chapters');
+      const url = workflowId
+        ? `/api/story-graph/chapters?workflowId=${workflowId}`
+        : '/api/story-graph/chapters';
+      const response = await fetch(url);
       const data = await response.json();
       if (data.success) {
         setChapters(data.chapters);
@@ -167,7 +174,7 @@ function StoryKnowledgeGraphContent() {
     } catch (error) {
       console.error('Failed to fetch chapters:', error);
     }
-  }, []);
+  }, [workflowId]);
 
   // Generate demo data
   const generateDemoData = useCallback(async () => {
@@ -351,6 +358,9 @@ function StoryKnowledgeGraphContent() {
                 <p className="text-xs text-muted-foreground">
                   {graphData.nodes.length} nodes • {graphData.edges.length} relationships
                 </p>
+                {graphWarning && (
+                  <p className="text-xs text-amber-500 mt-0.5">{graphWarning}</p>
+                )}
               </div>
             </div>
           </div>
@@ -380,25 +390,27 @@ function StoryKnowledgeGraphContent() {
               </button>
             </div>
             <Separator orientation="vertical" className="h-6 bg-border" />
-            <Button
-              variant="default"
-              size="default"
-              onClick={generateDemoData}
-              disabled={isGeneratingDemo}
-              className="bg-emerald-500 hover:bg-emerald-600 text-white shadow-lg shadow-emerald-500/20"
-            >
-              {isGeneratingDemo ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Generating...
-                </>
-              ) : (
-                <>
-                  <Sparkles className="w-4 h-4 mr-2" />
-                  Generate Demo Story
-                </>
-              )}
-            </Button>
+            {demoDataEnabled && (
+              <Button
+                variant="default"
+                size="default"
+                onClick={generateDemoData}
+                disabled={isGeneratingDemo}
+                className="bg-emerald-500 hover:bg-emerald-600 text-white shadow-lg shadow-emerald-500/20"
+              >
+                {isGeneratingDemo ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Generating...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-4 h-4 mr-2" />
+                    Generate Demo Story
+                  </>
+                )}
+              </Button>
+            )}
             <Button
               variant="outline"
               size="default"
@@ -566,27 +578,29 @@ function StoryKnowledgeGraphContent() {
                 <Network className="w-16 h-16 text-muted-foreground/50 mx-auto mb-4" />
                 <h3 className="text-xl font-bold text-foreground mb-2">No Story Data Yet</h3>
                 <p className="text-muted-foreground mb-6">
-                  Generate a demo story or ingest manuscript text to populate the knowledge graph.
+                  Ingest manuscript text using Story Intelligence to populate the knowledge graph.
                 </p>
-                <Button
-                  variant="default"
-                  size="default"
-                  onClick={generateDemoData}
-                  disabled={isGeneratingDemo}
-                  className="bg-emerald-500 hover:bg-emerald-600 text-white shadow-lg shadow-emerald-500/20"
-                >
-                  {isGeneratingDemo ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Generating...
-                    </>
-                  ) : (
-                    <>
-                      <Sparkles className="w-4 h-4 mr-2" />
-                      Generate Demo Story
-                    </>
-                  )}
-                </Button>
+                {demoDataEnabled && (
+                  <Button
+                    variant="default"
+                    size="default"
+                    onClick={generateDemoData}
+                    disabled={isGeneratingDemo}
+                    className="bg-emerald-500 hover:bg-emerald-600 text-white shadow-lg shadow-emerald-500/20"
+                  >
+                    {isGeneratingDemo ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Generating...
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="w-4 h-4 mr-2" />
+                        Generate Demo Story
+                      </>
+                    )}
+                  </Button>
+                )}
               </div>
             </div>
           ) : viewMode === '3d' ? (
@@ -801,8 +815,8 @@ function StoryKnowledgeGraphContent() {
           <div className="bg-card/95 backdrop-blur-xl border border-border rounded-xl px-6 py-4 shadow-2xl max-w-lg">
             <h4 className="font-semibold text-foreground mb-2">How to use:</h4>
             <ol className="text-sm text-muted-foreground space-y-1">
-              <li>1. Click &quot;Generate Demo Story&quot; to create sample data</li>
-              <li>2. Or use the Story Intelligence agent to analyze your manuscript</li>
+              <li>1. Use the Story Intelligence agent to analyze your manuscript</li>
+              <li>2. Refresh this page after analysis completes</li>
               <li>3. Navigate through chapters using the timeline below</li>
               <li>4. Click on nodes to see details, drag to explore</li>
             </ol>

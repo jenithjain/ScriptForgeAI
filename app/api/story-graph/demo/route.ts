@@ -10,6 +10,9 @@ import { authOptions } from '@/lib/auth-options';
 import { updateGraph, initializeGraphSchema, clearGraph } from '@/lib/agents/story-knowledge-graph';
 import type { StoryAnalysisResult } from '@/lib/agents/story-intelligence-core';
 
+const DEMO_API_ENABLED =
+  process.env.ENABLE_STORY_GRAPH_DEMO === 'true' || process.env.NODE_ENV !== 'production';
+
 // Demo story: "The Enchanted Kingdom"
 const generateDemoData = (): StoryAnalysisResult[] => {
   const baseTime = Date.now();
@@ -195,6 +198,15 @@ const generateDemoData = (): StoryAnalysisResult[] => {
 
 export async function POST(request: NextRequest) {
   try {
+    if (!DEMO_API_ENABLED) {
+      return NextResponse.json(
+        {
+          error: 'Demo data generation is disabled in this environment.'
+        },
+        { status: 403 }
+      );
+    }
+
     const session = await getServerSession(authOptions);
     if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
